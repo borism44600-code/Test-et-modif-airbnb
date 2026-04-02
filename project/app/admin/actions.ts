@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { uploadImage } from '@/lib/services/storage'
 
 // ============================================================================
 // PROPERTY ACTIONS
@@ -285,25 +286,117 @@ export async function deletePropertyImageAction(imageId: string, propertyId: str
 
 export async function setCoverImageAction(imageId: string, propertyId: string) {
   const supabase = await createClient()
-  
+
   // Remove cover from all other images
   await supabase
     .from('property_images')
     .update({ is_cover: false })
     .eq('property_id', propertyId)
-  
+
   // Set this image as cover
   const { error } = await supabase
     .from('property_images')
     .update({ is_cover: true })
     .eq('id', imageId)
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   revalidatePath(`/admin/properties/${propertyId}`)
   revalidatePath(`/properties/${propertyId}`)
-  
+
   return { success: true }
+}
+
+// ============================================================================
+// ROOM ACTIONS
+// ============================================================================
+
+export async function createPropertyRoomAction(
+  propertyId: string,
+  roomData: {
+    room_name: string
+    room_number?: number
+    bed_type?: string
+    bed_count?: number
+    max_guests?: number
+    has_bathroom?: boolean
+    has_shower?: boolean
+    has_bathtub?: boolean
+    sort_order?: number
+    description_en?: string
+  }
+) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('property_rooms')
+    .insert({ property_id: propertyId, ...roomData })
+    .select()
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/admin/properties/${propertyId}`)
+  return { data }
+}
+
+export async function deletePropertyRoomAction(roomId: string, propertyId: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('property_rooms')
+    .delete()
+    .eq('id', roomId)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/admin/properties/${propertyId}`)
+  return { success: true }
+}
+
+// ============================================================================
+// IMAGE UPLOAD ACTION (fichier → Supabase Storage → property_images)
+// ============================================================================
+
+export async function uploadAndLinkImageAction(
+  propertyId: string,
+  file: File,
+  options: { alt_text?: string; is_cover?: boolean; display_order?: number } = {}
+) {
+  // 1. Upload vers Supabase Storage
+  const uploaded = await uploadImage(file, `properties/${propertyId}`)
+
+  if (uploaded.error || !uploaded.url) {
+    return { error: uploaded.error || 'Upload failed' }
+  }
+
+  // 2. Insérer dans property_images
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('property_images')
+    .insert({
+      property_id: propertyId,
+      image_url: uploaded.url,
+      alt_text: options.alt_text,
+      is_cover: options.is_cover ?? false,
+      display_order: options.display_order ?? 0,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath(`/admin/properties/${propertyId}`)
+  revalidatePath(`/properties/${propertyId}`)
+
+  return { data, url: uploaded.url, path: uploaded.path }
 }

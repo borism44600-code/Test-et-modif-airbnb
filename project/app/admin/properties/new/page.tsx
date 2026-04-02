@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { AdminLayout } from '@/components/admin/admin-layout'
 import { ImageUploader } from '@/components/admin/image-uploader'
-import { createPropertyAction } from '@/app/admin/actions'
+import { createPropertyAction, createPropertyRoomAction } from '@/app/admin/actions'
 import { 
   PropertyType, PropertyStatus, BEDROOM_OPTIONS, GUEST_CAPACITY_OPTIONS,
   SleepingSpace, BedType, BED_TYPE_LABELS, BathroomType, BATHROOM_TYPE_LABELS,
@@ -263,15 +263,35 @@ export default function NewPropertyPage() {
         internal_ical_url: ''
       }
 
-      // Save to database
+      // 1. Save property core
       const result = await createPropertyAction(propertyData)
-      
-      if (result.error) {
+
+      if (result.error || !result.data) {
         alert(`Erreur lors de la sauvegarde : ${result.error}`)
         return
       }
-      
-      router.push('/admin/properties')
+
+      const propertyId = result.data.id
+
+      // 2. Save sleeping arrangements → property_rooms
+      if (sleepingArrangements.length > 0) {
+        await Promise.all(
+          sleepingArrangements.map((room, index) => {
+            const primaryBed = room.beds[0]
+            return createPropertyRoomAction(propertyId, {
+              room_name: room.roomName,
+              room_number: index + 1,
+              bed_type: primaryBed?.type,
+              bed_count: primaryBed?.quantity ?? 1,
+              max_guests: primaryBed?.quantity ?? 2,
+              has_bathroom: room.ensuite ?? false,
+              sort_order: index,
+            })
+          })
+        )
+      }
+
+      router.push(`/admin/properties/${propertyId}/edit`)
     } catch (error) {
       console.error('Error saving property:', error)
       alert('Failed to save property. Please try again.')

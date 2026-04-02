@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -8,12 +9,22 @@ import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
 import { mockServices } from '@/lib/data'
+import { fetchServicesClient } from '@/lib/data-fetcher-client'
 import { useTranslations } from '@/i18n/provider'
 
 export default function ServicesPage() {
   const t = useTranslations('services')
   const tHeader = useTranslations('header')
   const tContact = useTranslations('contact')
+
+  type Service = typeof mockServices[number]
+  const [services, setServices] = useState<Service[]>(mockServices)
+
+  useEffect(() => {
+    fetchServicesClient().then(data => {
+      if (data.length > 0) setServices(data as Service[])
+    })
+  }, [])
 
   const categoryInfo = {
     breakfast: {
@@ -42,13 +53,13 @@ export default function ServicesPage() {
       description: t('description')
     }
   }
-  const groupedServices = mockServices.reduce((acc, service) => {
+  const groupedServices = services.reduce((acc, service) => {
     if (!acc[service.category]) {
       acc[service.category] = []
     }
     acc[service.category].push(service)
     return acc
-  }, {} as Record<string, typeof mockServices>)
+  }, {} as Record<string, Service[]>)
 
   return (
     <>

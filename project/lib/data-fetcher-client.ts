@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { adaptPropertiesToUi, adaptPropertyToUi, type DbProperty, type UiProperty } from '@/lib/adapters/property-adapter'
-import { mockProperties, mockPartners } from '@/lib/data'
+import { mockProperties, mockPartners, mockServices } from '@/lib/data'
 
 export async function fetchPublishedPropertiesClient(): Promise<UiProperty[]> {
   try {
@@ -71,6 +71,33 @@ export async function fetchPublishedPartnersClient() {
     }))
   } catch {
     return mockPartners
+  }
+}
+
+export async function fetchServicesClient() {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('is_active', true)
+      .order('category', { ascending: true })
+      .order('sort_order', { ascending: true })
+
+    if (error || !data || data.length === 0) {
+      return mockServices
+    }
+    return data.map(s => ({
+      id: s.id,
+      name: s.name_en || s.name_fr || '',
+      category: s.category,
+      description: s.description_en || s.description_fr || '',
+      price: s.price,
+      priceType: s.price_unit,
+      image: s.image || '/images/services/concierge.jpg',
+    }))
+  } catch {
+    return mockServices
   }
 }
 

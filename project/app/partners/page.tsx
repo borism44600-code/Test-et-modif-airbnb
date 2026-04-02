@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -8,12 +9,22 @@ import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
 import { mockPartners } from '@/lib/data'
+import { fetchPublishedPartnersClient } from '@/lib/data-fetcher-client'
 import { useTranslations } from '@/i18n/provider'
 
 export default function PartnersPage() {
   const t = useTranslations('partners')
   const tServices = useTranslations('services')
   const tContact = useTranslations('contact')
+
+  type Partner = typeof mockPartners[number]
+  const [partners, setPartners] = useState<Partner[]>(mockPartners)
+
+  useEffect(() => {
+    fetchPublishedPartnersClient().then(data => {
+      if (data.length > 0) setPartners(data as Partner[])
+    })
+  }, [])
 
   const categoryInfo = {
     restaurant: {
@@ -42,13 +53,13 @@ export default function PartnersPage() {
       description: t('description')
     }
   }
-  const groupedPartners = mockPartners.reduce((acc, partner) => {
+  const groupedPartners = partners.reduce((acc, partner) => {
     if (!acc[partner.category]) {
       acc[partner.category] = []
     }
     acc[partner.category].push(partner)
     return acc
-  }, {} as Record<string, typeof mockPartners>)
+  }, {} as Record<string, Partner[]>)
 
   return (
     <>

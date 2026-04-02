@@ -22,6 +22,8 @@ import { ServicesSelector } from '@/components/booking/services-selector'
 import { PayPalPayment, PaymentSuccessDetails } from '@/components/payment/paypal-payment'
 import type { BreakfastBooking, MealBooking, TaxiBooking, OtherServiceBooking } from '@/lib/service-booking'
 import { mockProperties, mockAddons } from '@/lib/data'
+import { fetchPublishedPropertiesClient } from '@/lib/data-fetcher-client'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
 import { 
   checkPropertyAvailability, 
   generateSplitStaySuggestion,
@@ -77,7 +79,15 @@ function BookingContent() {
   const [paymentDetails, setPaymentDetails] = useState<PaymentSuccessDetails | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
 
-  const selectedProperty = mockProperties.find(p => p.id === selectedPropertyId)
+  const [allProperties, setAllProperties] = useState<UiProperty[]>(mockProperties)
+
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(data => {
+      if (data.length > 0) setAllProperties(data)
+    })
+  }, [])
+
+  const selectedProperty = allProperties.find(p => p.id === selectedPropertyId)
 
   // Check availability when dates change
   useEffect(() => {
@@ -89,7 +99,7 @@ function BookingContent() {
           selectedProperty,
           dates.start,
           dates.end,
-          mockProperties
+          allProperties
         )
         setSplitStaySuggestion(suggestion)
         setAcceptedSplitStay(false)
@@ -111,7 +121,7 @@ function BookingContent() {
     if (acceptedSplitStay && splitStaySuggestion) {
       // Calculate total for split stay
       splitStaySuggestion.segments.forEach(segment => {
-        const property = mockProperties.find(p => p.id === segment.propertyId)
+        const property = allProperties.find(p => p.id === segment.propertyId)
         if (property) {
           total += property.pricePerNight * segment.nights
         }
@@ -307,7 +317,7 @@ function BookingContent() {
                     <p className="text-muted-foreground">Select from our collection of carefully chosen stays</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {mockProperties.map((property) => (
+                    {allProperties.map((property) => (
                       <motion.button
                         key={property.id}
                         whileHover={{ scale: 1.02 }}
@@ -641,7 +651,7 @@ function BookingContent() {
                         </div>
                         <div className="space-y-4">
                           {splitStaySuggestion.segments.map((segment, idx) => {
-                            const property = mockProperties.find(p => p.id === segment.propertyId)
+                            const property = allProperties.find(p => p.id === segment.propertyId)
                             if (!property) return null
                             return (
                               <div key={idx} className="flex gap-4 p-3 bg-secondary/30 rounded-lg">
@@ -721,7 +731,7 @@ function BookingContent() {
                     <div className="p-6 space-y-3 border-b border-border">
                       {acceptedSplitStay && splitStaySuggestion ? (
                         splitStaySuggestion.segments.map((segment, idx) => {
-                          const property = mockProperties.find(p => p.id === segment.propertyId)
+                          const property = allProperties.find(p => p.id === segment.propertyId)
                           if (!property) return null
                           return (
                             <div key={idx} className="flex justify-between">
