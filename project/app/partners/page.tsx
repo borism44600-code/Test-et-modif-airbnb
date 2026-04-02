@@ -7,7 +7,8 @@ import { Utensils, Sparkles, Mountain, Activity, Car, ExternalLink, Tag } from '
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
-import { mockPartners } from '@/lib/data'
+import { fetchPublishedPartnersClient } from '@/lib/data-fetcher-client'
+import { useState, useEffect } from 'react'
 import { useTranslations } from '@/i18n/provider'
 
 export default function PartnersPage() {
@@ -42,13 +43,18 @@ export default function PartnersPage() {
       description: t('description')
     }
   }
-  const groupedPartners = mockPartners.reduce((acc, partner) => {
+  const [partners, setPartners] = useState<{ id: string; name: string; category: string; description: string; image: string; website?: string; discountCode?: string }[]>([])
+  useEffect(() => {
+    fetchPublishedPartnersClient().then(setPartners)
+  }, [])
+
+  const groupedPartners = partners.reduce((acc, partner) => {
     if (!acc[partner.category]) {
       acc[partner.category] = []
     }
     acc[partner.category].push(partner)
     return acc
-  }, {} as Record<string, typeof mockPartners>)
+  }, {} as Record<string, typeof partners>)
 
   return (
     <>
@@ -80,6 +86,15 @@ export default function PartnersPage() {
         {/* Partners by Category */}
         <section className="py-24">
           <div className="container mx-auto px-6 space-y-20">
+            {Object.keys(groupedPartners).length === 0 && (
+              <div className="text-center py-16">
+                <Activity className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground font-medium text-lg">Partners coming soon</p>
+                <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                  We are building partnerships with the best local providers. Check back soon.
+                </p>
+              </div>
+            )}
             {Object.entries(groupedPartners).map(([category, partners]) => {
               const info = categoryInfo[category as keyof typeof categoryInfo]
               const IconComponent = info?.icon || Activity

@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useRef } from 'react'
 import Image from 'next/image'
-import { 
-  Upload, X, GripVertical, Link2, Plus, ImageIcon, 
-  Star, Trash2, ExternalLink, Check
+import {
+  Upload, X, GripVertical, Link2, Plus, ImageIcon,
+  Star, Trash2, ExternalLink, Check, Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,8 +18,17 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { uploadPropertyImageAction, addPropertyImageAction } from '@/app/admin/actions'
+
+interface ImageItem {
+  id?: string
+  url: string
+  isCover?: boolean
+}
 
 interface ImageUploaderProps {
+  /** Property ID — when set, images upload to Supabase Storage */
+  propertyId?: string
   images: string[]
   onChange: (images: string[]) => void
   maxImages?: number
@@ -31,6 +40,7 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({
+  propertyId,
   images,
   onChange,
   maxImages = 20,
@@ -44,6 +54,8 @@ export function ImageUploader({
   const [showUrlDialog, setShowUrlDialog] = useState(false)
   const [urlInput, setUrlInput] = useState('')
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -56,63 +68,100 @@ export function ImageUploader({
     setIsDragging(false)
   }, [])
 
+  /**
+   * Upload files to Supabase Storage if propertyId is set,
+   * otherwise fall back to blob URLs (pre-save mode).
+   */
+  const uploadFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0) return
+
+    setUploadError(null)
+
+    if (!propertyId) {
+      // Pre-save mode: use blob URLs (will be replaced after property is created)
+      const newUrls = files.map(file => URL.createObjectURL(file))
+      if (single) {
+        onChange([newUrls[0]])
+      } else {
+        onChange([...images, ...newUrls].slice(0, maxImages))
+      }
+      return
+    }
+
+    // Real upload to Supabase Storage
+    setIsUploading(true)
+    const newUrls: string[] = []
+
+    for (const file of files) {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const result = await uploadPropertyImageAction(propertyId, formData)
+      if (result.error) {
+        setUploadError(result.error)
+        break
+      }
+      if (result.data) {
+        newUrls.push(result.data.url)
+      }
+    }
+
+    setIsUploading(false)
+
+    if (newUrls.length > 0) {
+      if (single) {
+        onChange([newUrls[0]])
+      } else {
+        onChange([...images, ...newUrls].slice(0, maxImages))
+      }
+    }
+  }, [propertyId, images, onChange, maxImages, single])
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    
-    const files = Array.from(e.dataTransfer.files).filter(file => 
+    const files = Array.from(e.dataTransfer.files).filter(file =>
       file.type.startsWith('image/')
     )
-    
-    if (files.length === 0) return
-    
-    // Convert files to URLs (in production, upload to storage)
-    const newUrls = files.map(file => URL.createObjectURL(file))
-    
-    if (single) {
-      onChange([newUrls[0]])
-    } else {
-      const combined = [...images, ...newUrls].slice(0, maxImages)
-      onChange(combined)
-    }
-  }, [images, onChange, maxImages, single])
+    uploadFiles(files)
+  }, [uploadFiles])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(file => 
+    const files = Array.from(e.target.files || []).filter(file =>
       file.type.startsWith('image/')
     )
-    
-    if (files.length === 0) return
-    
-    // Convert files to URLs (in production, upload to storage)
-    const newUrls = files.map(file => URL.createObjectURL(file))
-    
-    if (single) {
-      onChange([newUrls[0]])
-    } else {
-      const combined = [...images, ...newUrls].slice(0, maxImages)
-      onChange(combined)
-    }
-    
-    // Reset input
+    uploadFiles(files)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
-  }, [images, onChange, maxImages, single])
+  }, [uploadFiles])
 
-  const addUrlImage = useCallback(() => {
+  const addUrlImage = useCallback(async () => {
     if (!urlInput.trim()) return
-    
+
+    if (propertyId) {
+      // Save URL directly to property_images table
+      const result = await addPropertyImageAction(propertyId, {
+        image_url: urlInput.trim(),
+        display_order: images.length,
+        is_cover: images.length === 0,
+      })
+      if (result.error) {
+        setUploadError(result.error)
+        return
+      }
+    }
+
     if (single) {
       onChange([urlInput.trim()])
     } else {
       if (images.length >= maxImages) return
       onChange([...images, urlInput.trim()])
     }
-    
+
     setUrlInput('')
     setShowUrlDialog(false)
-  }, [urlInput, images, onChange, maxImages, single])
+  }, [urlInput, images, onChange, maxImages, single, propertyId])
 
   const removeImage = useCallback((index: number) => {
     const newImages = images.filter((_, i) => i !== index)
@@ -136,7 +185,7 @@ export function ImageUploader({
   const handleImageDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault()
     if (draggedIndex === null || draggedIndex === index) return
-    
+
     const newImages = [...images]
     const [moved] = newImages.splice(draggedIndex, 1)
     newImages.splice(index, 0, moved)
@@ -161,6 +210,16 @@ export function ImageUploader({
         </div>
       )}
 
+      {/* Upload error */}
+      {uploadError && (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-center gap-2">
+          <span className="text-destructive text-sm flex-1">{uploadError}</span>
+          <button onClick={() => setUploadError(null)} className="text-destructive/70 hover:text-destructive">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Drop Zone */}
       {canAddMore && (
         <div
@@ -169,11 +228,11 @@ export function ImageUploader({
           onDrop={handleDrop}
           className={cn(
             'border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer',
-            isDragging 
-              ? 'border-primary bg-primary/5' 
+            isDragging
+              ? 'border-primary bg-primary/5'
               : 'border-border hover:border-primary/50 hover:bg-muted/50'
           )}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !isUploading && fileInputRef.current?.click()}
         >
           <input
             ref={fileInputRef}
@@ -183,66 +242,76 @@ export function ImageUploader({
             onChange={handleFileSelect}
             className="hidden"
           />
-          
-          <Upload className={cn(
-            'w-10 h-10 mx-auto mb-3 transition-colors',
-            isDragging ? 'text-primary' : 'text-muted-foreground'
-          )} />
-          
-          <p className="text-sm font-medium mb-1">
-            {isDragging ? 'Drop images here' : 'Click or drag images to upload'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {single ? 'PNG, JPG up to 10MB' : `PNG, JPG up to 10MB each. ${images.length}/${maxImages} images`}
-          </p>
-          
+
+          {isUploading ? (
+            <>
+              <Loader2 className="w-10 h-10 mx-auto mb-3 text-primary animate-spin" />
+              <p className="text-sm font-medium mb-1">Uploading...</p>
+            </>
+          ) : (
+            <>
+              <Upload className={cn(
+                'w-10 h-10 mx-auto mb-3 transition-colors',
+                isDragging ? 'text-primary' : 'text-muted-foreground'
+              )} />
+              <p className="text-sm font-medium mb-1">
+                {isDragging ? 'Drop images here' : 'Click or drag images to upload'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {single ? 'PNG, JPG up to 10MB' : `PNG, JPG up to 10MB each. ${images.length}/${maxImages} images`}
+              </p>
+            </>
+          )}
+
           {/* Add URL option */}
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <span className="text-xs text-muted-foreground">or</span>
-            <Dialog open={showUrlDialog} onOpenChange={setShowUrlDialog}>
-              <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Link2 className="w-4 h-4 mr-2" />
-                  Add from URL
-                </Button>
-              </DialogTrigger>
-              <DialogContent onClick={(e) => e.stopPropagation()}>
-<DialogHeader>
-  <DialogTitle>Add Image from URL</DialogTitle>
-  <DialogDescription>Enter the URL of an image to add to the gallery.</DialogDescription>
-  </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Image URL</Label>
-                    <Input
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="https://example.com/image.jpg"
-                    />
-                  </div>
-                  {urlInput && (
-                    <div className="relative w-full h-40 bg-muted rounded-lg overflow-hidden">
-                      <Image
-                        src={urlInput}
-                        alt="Preview"
-                        fill
-                        className="object-contain"
-                        onError={() => {}}
+          {!isUploading && (
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <span className="text-xs text-muted-foreground">or</span>
+              <Dialog open={showUrlDialog} onOpenChange={setShowUrlDialog}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Link2 className="w-4 h-4 mr-2" />
+                    Add from URL
+                  </Button>
+                </DialogTrigger>
+                <DialogContent onClick={(e) => e.stopPropagation()}>
+                  <DialogHeader>
+                    <DialogTitle>Add Image from URL</DialogTitle>
+                    <DialogDescription>Enter the URL of an image to add to the gallery.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Image URL</Label>
+                      <Input
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
                       />
                     </div>
-                  )}
-                  <Button onClick={addUrlImage} className="w-full">
-                    <Check className="w-4 h-4 mr-2" />
-                    Add Image
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+                    {urlInput && (
+                      <div className="relative w-full h-40 bg-muted rounded-lg overflow-hidden">
+                        <Image
+                          src={urlInput}
+                          alt="Preview"
+                          fill
+                          className="object-contain"
+                          onError={() => {}}
+                        />
+                      </div>
+                    )}
+                    <Button onClick={addUrlImage} className="w-full">
+                      <Check className="w-4 h-4 mr-2" />
+                      Add Image
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
         </div>
       )}
 
@@ -272,7 +341,7 @@ export function ImageUploader({
                 fill
                 className="object-cover"
               />
-              
+
               {/* Cover badge */}
               {index === 0 && !single && (
                 <div className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full flex items-center gap-1">
@@ -280,14 +349,14 @@ export function ImageUploader({
                   Cover
                 </div>
               )}
-              
+
               {/* Drag handle */}
               {!single && (
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <GripVertical className="w-5 h-5 text-white drop-shadow-lg" />
                 </div>
               )}
-              
+
               {/* Actions overlay */}
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 {!single && index !== 0 && (
@@ -319,7 +388,7 @@ export function ImageUploader({
               </div>
             </div>
           ))}
-          
+
           {/* Add more button */}
           {!single && images.length < maxImages && (
             <button

@@ -7,7 +7,8 @@ import { Utensils, Car, Sparkles, Mountain, ArrowRight } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
-import { mockServices } from '@/lib/data'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { useTranslations } from '@/i18n/provider'
 
 export default function ServicesPage() {
@@ -42,13 +43,35 @@ export default function ServicesPage() {
       description: t('description')
     }
   }
-  const groupedServices = mockServices.reduce((acc, service) => {
+  const [services, setServices] = useState<{ id: string; name: string; category: string; description: string; image: string }[]>([])
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('services')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+      if (data) {
+        setServices(data.map(s => ({
+          id: s.id,
+          name: s.name_en || s.name_fr || '',
+          category: s.category,
+          description: s.description_en || s.description_fr || '',
+          image: s.image || '/placeholder-service.jpg',
+        })))
+      }
+    }
+    load()
+  }, [])
+
+  const groupedServices = services.reduce((acc, service) => {
     if (!acc[service.category]) {
       acc[service.category] = []
     }
     acc[service.category].push(service)
     return acc
-  }, {} as Record<string, typeof mockServices>)
+  }, {} as Record<string, typeof services>)
 
   return (
     <>
@@ -80,6 +103,15 @@ export default function ServicesPage() {
         {/* Services by Category */}
         <section className="py-24">
           <div className="container mx-auto px-6 space-y-24">
+            {Object.keys(groupedServices).length === 0 && (
+              <div className="text-center py-16">
+                <Sparkles className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground font-medium text-lg">Services coming soon</p>
+                <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                  Our premium services are being prepared. Contact us for more information.
+                </p>
+              </div>
+            )}
             {Object.entries(groupedServices).map(([category, services], categoryIndex) => {
               const info = categoryInfo[category as keyof typeof categoryInfo]
               const IconComponent = info?.icon || Sparkles

@@ -3,14 +3,15 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { signOut, useSession } from 'next-auth/react'
-import { 
-  Home, 
-  Building2, 
-  Calendar, 
+import { useAuth } from '@/components/providers/session-provider'
+import { adminLogoutAction } from '@/app/admin/actions'
+import {
+  Home,
+  Building2,
+  Calendar,
   RefreshCw,
-  Users, 
-  Settings, 
+  Users,
+  Settings,
   LogOut,
   Search,
   Bell,
@@ -46,14 +47,15 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { user, role, name, isLoading } = useAuth()
 
   const handleSignOut = async () => {
-    await signOut({ redirect: false })
+    await adminLogoutAction()
     router.push('/admin/login')
+    router.refresh()
   }
 
-  if (status === 'loading') {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -61,13 +63,11 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     )
   }
 
-  const user = session?.user
-
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -92,7 +92,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || 
+              const isActive = pathname === item.href ||
                 (item.href !== '/admin' && pathname.startsWith(item.href))
               return (
                 <Link
@@ -100,8 +100,8 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                   href={item.href}
                   className={`
                     flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                    ${isActive 
-                      ? 'bg-primary text-primary-foreground' 
+                    ${isActive
+                      ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     }
                   `}
@@ -118,16 +118,16 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
             <div className="flex items-center gap-3 px-4 py-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="text-sm font-semibold text-primary">
-                  {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+                  {name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{user?.name || 'User'}</p>
+                <p className="font-medium truncate">{name || 'User'}</p>
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                  {user?.role && (
+                  {role && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                      {user.role === 'admin' ? (
+                      {role === 'admin' ? (
                         <><Shield className="w-2.5 h-2.5 mr-0.5" />Admin</>
                       ) : (
                         'Editor'
@@ -137,8 +137,8 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                 </div>
               </div>
             </div>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               className="w-full justify-start gap-3 mt-2 text-muted-foreground hover:text-destructive"
               onClick={handleSignOut}
             >
@@ -155,9 +155,9 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
         <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border">
           <div className="flex items-center justify-between px-4 lg:px-8 h-16">
             <div className="flex items-center gap-4">
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="lg:hidden"
                 onClick={() => setSidebarOpen(true)}
               >
@@ -169,8 +169,8 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
             <div className="flex items-center gap-4">
               <div className="relative hidden md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search..." 
+                <Input
+                  placeholder="Search..."
                   className="pl-10 w-64 bg-muted/50"
                 />
               </div>

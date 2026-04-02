@@ -1,58 +1,61 @@
 -- ============================================================================
--- SCRIPT 005 — FIX ADMIN AUTH
--- Aligne la table admin_users avec ce que le code attend.
--- Le script 003 crée admin_users avec "id" comme PK.
--- Le code (lib/services/auth.ts, app/admin/actions.ts) cherche "user_id".
--- Solution : ajouter la colonne user_id, populer depuis id, indexer.
--- Idempotent — peut être rejoué sans risque.
+-- SCRIPT 005 — CANONICAL ADMIN_USERS TABLE
+-- Single source of truth for admin roles.
+-- user_id references auth.users(id) — Supabase Auth is the only identity provider.
+-- Replaces any previous admin_users definition.
 -- ============================================================================
 
-DO $$ BEGIN
+-- Drop the old table (had inconsistent column names: id vs user_id)
+DROP TABLE IF EXISTS public.admin_users CASCADE;
 
-  -- Ajouter user_id si absent (les nouvelles lignes utilisent user_id)
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'admin_users' AND column_name = 'user_id'
-  ) THEN
-    ALTER TABLE public.admin_users
-      ADD COLUMN user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE;
-    -- Backfill : pour les lignes existantes, user_id = id (même UUID)
-    UPDATE public.admin_users SET user_id = id WHERE user_id IS NULL;
-    ALTER TABLE public.admin_users ALTER COLUMN user_id SET NOT NULL;
-  END IF;
+CREATE TABLE public.admin_users (
+  user_id    uuid        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email      text        NOT NULL UNIQUE,
+  name       text,
+  role       text        NOT NULL DEFAULT 'admin'
+                         CHECK (role IN ('admin', 'editor')),
+  is_active  boolean     NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
-  -- Ajouter name si absent
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'admin_users' AND column_name = 'name'
-  ) THEN
-    ALTER TABLE public.admin_users ADD COLUMN name TEXT;
-  END IF;
+-- Fast lookup during auth check
+CREATE INDEX idx_admin_users_active
+  ON public.admin_users (user_id) WHERE is_active = true;
 
-  -- S'assurer que role a la contrainte check
-  -- (pas de ALTER CONSTRAINT simple en Postgres, on ajoute seulement si la colonne role est déjà là)
+-- RLS
+ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
-END $$;
+-- Admins can read their own row via anon/authenticated key
+CREATE POLICY "Users can read own admin row"
+  ON public.admin_users FOR SELECT
+  USING (auth.uid() = user_id);
 
--- Index sur user_id pour les lookups rapides
-CREATE INDEX IF NOT EXISTS idx_admin_users_user_id ON public.admin_users(user_id);
+-- Service role (server actions) can manage all rows
+CREATE POLICY "Service role full access"
+  ON public.admin_users FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- Auto-update updated_at
+CREATE OR REPLACE FUNCTION public.update_admin_users_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_admin_users_updated_at
+  BEFORE UPDATE ON public.admin_users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_admin_users_updated_at();
 
 -- ============================================================================
--- COMMENT DE RÉFÉRENCE : structure cible de admin_users
+-- HOW TO CREATE YOUR FIRST ADMIN:
+-- 1. Create the user in Supabase Dashboard → Authentication → Users
+-- 2. Run:
+--    INSERT INTO public.admin_users (user_id, email, name, role)
+--    VALUES ('<uuid-from-step-1>', 'your@email.com', 'Your Name', 'admin');
+-- 3. Login at /admin/login with those credentials.
 -- ============================================================================
--- admin_users :
---   id          UUID PK REFERENCES auth.users(id)  -- colonne d'origine (script 003)
---   user_id     UUID UNIQUE REFERENCES auth.users(id) -- colonne attendue par le code
---   email       TEXT NOT NULL UNIQUE
---   name        TEXT
---   role        TEXT DEFAULT 'admin' (admin | editor)
---   is_active   BOOLEAN DEFAULT true
---   created_at  TIMESTAMPTZ
---   updated_at  TIMESTAMPTZ
---
--- Pour créer un admin depuis Supabase Dashboard :
---   1. Créer l'utilisateur dans Authentication → Users
---   2. Insérer dans admin_users :
---      INSERT INTO public.admin_users (id, user_id, email, name, role)
---      VALUES (<uuid>, <uuid>, 'email@example.com', 'Nom', 'admin');
---      (id et user_id reçoivent le même UUID = celui de auth.users)

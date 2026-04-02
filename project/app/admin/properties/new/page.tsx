@@ -23,7 +23,8 @@ import {
 import { AdminLayout } from '@/components/admin/admin-layout'
 import { ImageUploader } from '@/components/admin/image-uploader'
 import { createPropertyAction } from '@/app/admin/actions'
-import { 
+import { propertyFormSchema, type PropertyFormData } from '@/lib/validations/property'
+import {
   PropertyType, PropertyStatus, BEDROOM_OPTIONS, GUEST_CAPACITY_OPTIONS,
   SleepingSpace, BedType, BED_TYPE_LABELS, BathroomType, BATHROOM_TYPE_LABELS,
   MAIN_DISTRICTS, MEDINA_DISTRICTS, KASBAH_DISTRICTS, APARTMENT_DISTRICTS,
@@ -224,57 +225,72 @@ export default function NewPropertyPage() {
     return []
   }
 
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   const handleSave = async (publish = false) => {
     setIsSaving(true)
-    
+    setSaveError(null)
+
     try {
-      // Prepare data for database
-      const propertyData = {
+      // Build form data matching the Zod schema
+      const formPayload: PropertyFormData = {
         title: formData.title,
         slug: formData.slug || generateSlug(formData.title),
-        type: formData.type as 'riad' | 'villa' | 'apartment' | 'house',
-        description_short: formData.shortDescription,
-        description_long: formData.description,
+        type: formData.type,
+        subtitle: formData.subtitle,
+        shortDescription: formData.shortDescription,
+        description: formData.description,
+        status: publish ? 'published' : formData.status,
+        featured: formData.featured,
         city: formData.city,
         district: formData.district,
+        subDistrict: formData.subDistrict,
         address: formData.address,
-        map_location: formData.mapLocation,
-        price_per_night: formData.pricePerNight || 0,
-        cleaning_fee: formData.cleaningFee || 0,
-        service_fee: 0,
-        num_bedrooms: formData.numberOfBedrooms || 1,
-        num_bathrooms: formData.bathrooms || 1,
-        bedroom_guest_capacity: formData.bedroomGuestCapacity || 2,
-        additional_guest_capacity: formData.additionalGuestCapacity || 0,
-        total_guest_capacity: formData.totalGuestCapacity || formData.bedroomGuestCapacity || 2,
-        amenities: Object.entries(formData.features || {})
-          .filter(([_, value]) => value)
-          .map(([key]) => key),
-        parking_type: formData.parking,
-        parking_spots: 0,
-        parking_notes: formData.parkingNotes,
-        seo_title: formData.metaTitle,
-        seo_description: formData.metaDescription,
-        seo_keywords: formData.seoKeywords ? formData.seoKeywords.split(',').map(k => k.trim()).filter(Boolean) : [],
-        status: publish ? 'published' : formData.status,
-        featured: formData.featured || false,
-        airbnb_ical_url: formData.airbnbIcalUrl,
-        booking_ical_url: formData.bookingIcalUrl,
-        internal_ical_url: ''
+        mapLocation: formData.mapLocation,
+        nearbyInfo: formData.nearbyInfo,
+        numberOfBedrooms: formData.numberOfBedrooms,
+        numberOfBathrooms: formData.bathrooms,
+        bedroomGuestCapacity: formData.bedroomGuestCapacity,
+        additionalGuestCapacity: formData.additionalGuestCapacity,
+        totalGuestCapacity: formData.totalGuestCapacity,
+        pricePerNight: formData.pricePerNight,
+        cleaningFee: formData.cleaningFee,
+        serviceFee: 0,
+        securityDeposit: formData.securityDeposit,
+        currency: formData.currency,
+        priceDisplayNote: formData.priceDisplayNote,
+        parkingType: formData.parking,
+        parkingSpots: 0,
+        parkingNotes: formData.parkingNotes,
+        airbnbIcalUrl: formData.airbnbIcalUrl,
+        bookingIcalUrl: formData.bookingIcalUrl,
+        internalIcalUrl: '',
+        seoTitle: formData.metaTitle,
+        seoDescription: formData.metaDescription,
+        seoKeywords: formData.seoKeywords,
+        features: formData.features as Record<string, boolean>,
       }
 
-      // Save to database
-      const result = await createPropertyAction(propertyData)
-      
-      if (result.error) {
-        alert(`Erreur lors de la sauvegarde : ${result.error}`)
+      // Client-side validation
+      const validated = propertyFormSchema.safeParse(formPayload)
+      if (!validated.success) {
+        const firstError = validated.error.issues[0]
+        setSaveError(`Validation: ${firstError.path.join('.')} — ${firstError.message}`)
         return
       }
-      
+
+      // Save to database (includes rooms + sync)
+      const result = await createPropertyAction(formPayload, sleepingArrangements)
+
+      if (result.error) {
+        setSaveError(result.error)
+        return
+      }
+
       router.push('/admin/properties')
     } catch (error) {
       console.error('Error saving property:', error)
-      alert('Failed to save property. Please try again.')
+      setSaveError('Failed to save property. Please try again.')
     } finally {
       setIsSaving(false)
     }
@@ -315,6 +331,16 @@ export default function NewPropertyPage() {
 
         {/* Form Content */}
         <div className="flex-1 space-y-6">
+          {/* Error Banner */}
+          {saveError && (
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
+              <span className="text-destructive font-medium text-sm flex-1">{saveError}</span>
+              <button onClick={() => setSaveError(null)} className="text-destructive/70 hover:text-destructive text-sm">
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {/* Header Actions */}
           <div className="flex items-center justify-between">
             <div>

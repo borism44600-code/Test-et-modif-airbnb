@@ -8,11 +8,10 @@ import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
 import { PropertyCard } from '@/components/properties/property-card'
-import { mockProperties } from '@/lib/data'
+import { fetchPublishedPropertiesClient } from '@/lib/data-fetcher-client'
 import { LOCATIONS, PROPERTY_TYPES } from '@/lib/seo'
-
-// Filter only riads
-const riads = mockProperties.filter(p => p.type === 'riad')
+import { useState, useEffect } from 'react'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
 
 // Content sections for SEO
 const contentSections = {
@@ -71,6 +70,11 @@ Les riads traditionnels comportent plusieurs étages avec des pièces disposées
 }
 
 export default function RiadsMarrakechPage() {
+  const [riads, setRiads] = useState<UiProperty[]>([])
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(props => setRiads(props.filter(p => p.type === 'riad')))
+  }, [])
+
   // Use English content directly for SSR stability - client hydration will update if needed
   const content = {
     whatIsRiad: contentSections.whatIsRiad.en,

@@ -21,7 +21,8 @@ import { CancellationPolicy } from '@/components/booking/cancellation-policy'
 import { ServicesSelector } from '@/components/booking/services-selector'
 import { PayPalPayment, PaymentSuccessDetails } from '@/components/payment/paypal-payment'
 import type { BreakfastBooking, MealBooking, TaxiBooking, OtherServiceBooking } from '@/lib/service-booking'
-import { mockProperties, mockAddons } from '@/lib/data'
+import { fetchPublishedPropertiesClient, fetchAddonsClient } from '@/lib/data-fetcher-client'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
 import { 
   checkPropertyAvailability, 
   generateSplitStaySuggestion,
@@ -67,29 +68,38 @@ function BookingContent() {
   }>({ breakfasts: [], meals: [], taxis: [], otherServices: [], total: 0 })
   const [contactInfo, setContactInfo] = useState({ name: '', email: '', phone: '', specialRequests: '' })
   
+  // Data from Supabase
+  const [allProperties, setAllProperties] = useState<UiProperty[]>([])
+  const [allAddons, setAllAddons] = useState<{ id: string; name: string; description: string; pricePerPerson?: number; priceFlat?: number; image?: string }[]>([])
+
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(setAllProperties)
+    fetchAddonsClient().then(setAllAddons)
+  }, [])
+
   // Split-stay state
   const [splitStaySuggestion, setSplitStaySuggestion] = useState<SplitStaySuggestion | null>(null)
   const [acceptedSplitStay, setAcceptedSplitStay] = useState(false)
   const [bookingSegments, setBookingSegments] = useState<BookingSegment[]>([])
-  
+
   // Payment state
   const [paymentComplete, setPaymentComplete] = useState(false)
   const [paymentDetails, setPaymentDetails] = useState<PaymentSuccessDetails | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
 
-  const selectedProperty = mockProperties.find(p => p.id === selectedPropertyId)
+  const selectedProperty = allProperties.find(p => p.id === selectedPropertyId)
 
   // Check availability when dates change
   useEffect(() => {
     if (selectedProperty && dates.start && dates.end) {
-      const availability = checkPropertyAvailability(selectedProperty, dates.start, dates.end)
-      
+      const availability = checkPropertyAvailability(selectedProperty as unknown as import('@/lib/types').Property, dates.start, dates.end)
+
       if (availability.status === 'partial') {
         const suggestion = generateSplitStaySuggestion(
-          selectedProperty,
+          selectedProperty as unknown as import('@/lib/types').Property,
           dates.start,
           dates.end,
-          mockProperties
+          allProperties as unknown as import('@/lib/types').Property[]
         )
         setSplitStaySuggestion(suggestion)
         setAcceptedSplitStay(false)
@@ -111,7 +121,7 @@ function BookingContent() {
     if (acceptedSplitStay && splitStaySuggestion) {
       // Calculate total for split stay
       splitStaySuggestion.segments.forEach(segment => {
-        const property = mockProperties.find(p => p.id === segment.propertyId)
+        const property = allProperties.find(p => p.id === segment.propertyId)
         if (property) {
           total += property.pricePerNight * segment.nights
         }
@@ -122,7 +132,7 @@ function BookingContent() {
     
     // Add legacy addons (kept for backward compatibility)
     selectedAddons.forEach(addon => {
-      const addonData = mockAddons.find(a => a.id === addon.id)
+      const addonData = allAddons.find(a => a.id === addon.id)
       if (addonData) {
         if (addonData.pricePerPerson) {
           total += addonData.pricePerPerson * addon.persons * addon.quantity
@@ -306,8 +316,15 @@ function BookingContent() {
                     <h2 className="text-2xl font-semibold mb-2">Choose Your Property</h2>
                     <p className="text-muted-foreground">Select from our collection of carefully chosen stays</p>
                   </div>
+                  {allProperties.length === 0 ? (
+                    <div className="text-center py-16">
+                      <Building2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                      <p className="text-muted-foreground font-medium">No properties available yet</p>
+                      <p className="text-sm text-muted-foreground mt-1">Our properties are being prepared. Please check back soon.</p>
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {mockProperties.map((property) => (
+                    {allProperties.map((property) => (
                       <motion.button
                         key={property.id}
                         whileHover={{ scale: 1.02 }}
@@ -641,7 +658,7 @@ function BookingContent() {
                         </div>
                         <div className="space-y-4">
                           {splitStaySuggestion.segments.map((segment, idx) => {
-                            const property = mockProperties.find(p => p.id === segment.propertyId)
+                            const property = allProperties.find(p => p.id === segment.propertyId)
                             if (!property) return null
                             return (
                               <div key={idx} className="flex gap-4 p-3 bg-secondary/30 rounded-lg">
@@ -721,7 +738,7 @@ function BookingContent() {
                     <div className="p-6 space-y-3 border-b border-border">
                       {acceptedSplitStay && splitStaySuggestion ? (
                         splitStaySuggestion.segments.map((segment, idx) => {
-                          const property = mockProperties.find(p => p.id === segment.propertyId)
+                          const property = allProperties.find(p => p.id === segment.propertyId)
                           if (!property) return null
                           return (
                             <div key={idx} className="flex justify-between">
@@ -764,7 +781,7 @@ function BookingContent() {
                       )}
                       
                       {selectedAddons.map(addon => {
-                        const addonData = mockAddons.find(a => a.id === addon.id)
+                        const addonData = allAddons.find(a => a.id === addon.id)
                         if (!addonData) return null
                         const price = addonData.pricePerPerson 
                           ? addonData.pricePerPerson * addon.persons * addon.quantity

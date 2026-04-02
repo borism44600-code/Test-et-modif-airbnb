@@ -8,10 +8,10 @@ import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
 import { PropertyCard } from '@/components/properties/property-card'
-import { mockProperties } from '@/lib/data'
+import { fetchPublishedPropertiesClient } from '@/lib/data-fetcher-client'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
+import { useState, useEffect } from 'react'
 import { LOCATIONS } from '@/lib/seo'
-
-const villas = mockProperties.filter(p => p.type === 'villa')
 
 const villaFeatures = [
   { icon: Waves, title: 'Private Pool', description: 'Most villas feature private swimming pools for your exclusive use.' },
@@ -23,6 +23,10 @@ const villaFeatures = [
 ]
 
 export default function VillasMarrakechPage() {
+  const [villas, setVillas] = useState<UiProperty[]>([])
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(props => setVillas(props.filter(p => p.type === 'villa')))
+  }, [])
 
   return (
     <>

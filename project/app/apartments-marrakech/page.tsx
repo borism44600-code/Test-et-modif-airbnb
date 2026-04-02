@@ -8,8 +8,9 @@ import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
 import { PropertyCard } from '@/components/properties/property-card'
-import { mockProperties } from '@/lib/data'
-const apartments = mockProperties.filter(p => p.type === 'apartment')
+import { fetchPublishedPropertiesClient } from '@/lib/data-fetcher-client'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
+import { useState, useEffect } from 'react'
 
 const apartmentFeatures = [
   { icon: Building2, title: 'Modern Living', description: 'Contemporary design with all the comforts of home.' },
@@ -21,6 +22,10 @@ const apartmentFeatures = [
 ]
 
 export default function ApartmentsMarrakechPage() {
+  const [apartments, setApartments] = useState<UiProperty[]>([])
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(props => setApartments(props.filter(p => p.type === 'apartment')))
+  }, [])
 
   return (
     <>

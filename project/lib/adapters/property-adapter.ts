@@ -91,18 +91,23 @@ export interface DbProperty {
 // UI property type (matching existing mockProperties format)
 export interface UiProperty {
   id: string
+  slug: string
   title: string
   subtitle?: string
   shortDescription: string
   description: string
   type: 'riad' | 'villa' | 'apartment'
   pricePerNight: number
+  priceDisplayNote?: string
+  currency: string
   numberOfBedrooms: number
   numberOfBathrooms: number
+  bathrooms: number // alias for numberOfBathrooms (used by detail page)
   bedroomGuestCapacity: number
   additionalGuestCapacity: number
   totalGuestCapacity: number
   images: string[]
+  amenities: string[]
   location: {
     city: string
     district: string
@@ -110,6 +115,7 @@ export interface UiProperty {
     address?: string
     nearbyInfo?: string
     mapLocation?: string
+    distanceFromCenter?: string
     coordinates?: { lat: number; lng: number }
   }
   sleepingArrangements: SleepingSpace[]
@@ -120,6 +126,7 @@ export interface UiProperty {
     spots?: number
     notes?: string
   }
+  availability: { start: string; end: string }[]
   featured: boolean
 }
 
@@ -236,34 +243,48 @@ export function adaptPropertyToUi(dbProperty: DbProperty): UiProperty {
   const combinedFeatures = { ...featuresObj, ...amenitiesObj }
   const featureKeys = Object.keys(combinedFeatures).filter(k => combinedFeatures[k] === true)
 
+  const numBathrooms = dbProperty.num_bathrooms || dbProperty.bathrooms || 1
+
+  // Build amenities string array from features keys
+  const amenitiesList = featureKeys.length > 0 ? featureKeys : []
+
   return {
     id: dbProperty.id,
+    slug: dbProperty.slug || dbProperty.id,
     title,
-    subtitle: '',
+    subtitle: (dbProperty as unknown as Record<string, unknown>).subtitle as string || '',
     shortDescription: shortDesc,
     description,
     type: (dbProperty.type || dbProperty.category || 'riad') as 'riad' | 'villa' | 'apartment',
     pricePerNight: dbProperty.price_per_night || 0,
+    priceDisplayNote: (dbProperty as unknown as Record<string, unknown>).price_display_note as string || undefined,
+    currency: (dbProperty as unknown as Record<string, unknown>).currency as string || 'EUR',
     numberOfBedrooms: dbProperty.num_bedrooms || dbProperty.bedrooms || 1,
-    numberOfBathrooms: dbProperty.num_bathrooms || dbProperty.bathrooms || 1,
+    numberOfBathrooms: numBathrooms,
+    bathrooms: numBathrooms,
     bedroomGuestCapacity: dbProperty.bedroom_guest_capacity || dbProperty.total_guest_capacity || dbProperty.max_guests || 2,
     additionalGuestCapacity: dbProperty.additional_guest_capacity || 0,
     totalGuestCapacity: dbProperty.total_guest_capacity || dbProperty.max_guests || dbProperty.bedroom_guest_capacity || 2,
     images: propertyImages,
+    amenities: amenitiesList,
     location: {
       city: dbProperty.location || 'Marrakech',
       district: dbProperty.district || 'Medina',
       subDistrict: dbProperty.sub_district,
       address: dbProperty.address,
-      mapLocation: dbProperty.map_location || dbProperty.map_url
+      nearbyInfo: (dbProperty as unknown as Record<string, unknown>).nearby_info as string || undefined,
+      mapLocation: dbProperty.map_location || dbProperty.map_url,
+      distanceFromCenter: (dbProperty as unknown as Record<string, unknown>).distance_from_center as string || undefined,
     },
     sleepingArrangements: roomsToSleepingArrangements(dbProperty.property_rooms),
     features: amenitiestoFeatures(featureKeys),
     parking: {
       available: !!dbProperty.parking_type && dbProperty.parking_type !== 'none',
       type: dbProperty.parking_type,
-      spots: dbProperty.parking_spots
+      spots: dbProperty.parking_spots,
+      notes: dbProperty.parking_notes,
     },
+    availability: [],
     featured: dbProperty.featured || false
   }
 }
