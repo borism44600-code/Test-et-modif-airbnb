@@ -1,23 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
-import { 
-  Upload, 
-  Search, 
-  Grid3X3, 
-  List, 
+import {
+  Upload,
+  Search,
+  Grid3X3,
+  List,
   MoreHorizontal,
   Trash2,
   Download,
   Copy,
   FolderOpen,
   Image as ImageIcon,
-  FileText,
-  Film,
   Plus,
   Filter,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,29 +34,29 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminLayout } from '@/components/admin/admin-layout'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
-// Mock media items
-const mockMedia = [
-  { id: '1', name: 'riad-jardin-exterior.jpg', type: 'image', size: '2.4 MB', url: '/placeholder.svg?height=400&width=600', folder: 'properties', uploadedAt: '2025-12-01', usedIn: ['Property: Riad Jardin Secret'] },
-  { id: '2', name: 'villa-pool.jpg', type: 'image', size: '3.1 MB', url: '/placeholder.svg?height=400&width=600', folder: 'properties', uploadedAt: '2025-12-02', usedIn: ['Property: Villa Majorelle Gardens'] },
-  { id: '3', name: 'hammam-spa.jpg', type: 'image', size: '1.8 MB', url: '/placeholder.svg?height=400&width=600', folder: 'amenities', uploadedAt: '2025-12-03', usedIn: [] },
-  { id: '4', name: 'terrace-view.jpg', type: 'image', size: '2.2 MB', url: '/placeholder.svg?height=400&width=600', folder: 'properties', uploadedAt: '2025-12-04', usedIn: ['Property: Apartment Hivernage Elite'] },
-  { id: '5', name: 'bedroom-suite.jpg', type: 'image', size: '1.9 MB', url: '/placeholder.svg?height=400&width=600', folder: 'properties', uploadedAt: '2025-12-05', usedIn: ['Property: Riad Jardin Secret', 'Property: Riad Ambre & Épices'] },
-  { id: '6', name: 'moroccan-breakfast.jpg', type: 'image', size: '1.5 MB', url: '/placeholder.svg?height=400&width=600', folder: 'experiences', uploadedAt: '2025-12-06', usedIn: ['Partner: Chef Hassan'] },
-  { id: '7', name: 'atlas-mountains.jpg', type: 'image', size: '4.2 MB', url: '/placeholder.svg?height=400&width=600', folder: 'activities', uploadedAt: '2025-12-07', usedIn: ['Activity: Atlas Day Trip'] },
-  { id: '8', name: 'cooking-class.jpg', type: 'image', size: '2.0 MB', url: '/placeholder.svg?height=400&width=600', folder: 'activities', uploadedAt: '2025-12-08', usedIn: ['Activity: Cooking Class'] },
-]
+interface MediaItem {
+  id: string
+  name: string
+  type: string
+  size: string
+  url: string
+  folder: string
+  uploadedAt: string
+  usedIn: string[]
+}
 
-const folders = [
-  { id: 'all', name: 'All Files', count: 8 },
-  { id: 'properties', name: 'Properties', count: 4 },
-  { id: 'amenities', name: 'Amenities', count: 1 },
-  { id: 'experiences', name: 'Experiences', count: 1 },
-  { id: 'activities', name: 'Activities', count: 2 },
-]
+const BUCKET_NAME = 'property-images'
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+}
 
 export default function AdminMediaPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
@@ -65,15 +64,158 @@ export default function AdminMediaPage() {
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [media, setMedia] = useState<MediaItem[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filteredMedia = mockMedia.filter(item => {
+  const fetchMedia = useCallback(async () => {
+    setLoading(true)
+    try {
+      const supabase = createClient()
+
+      // Fetch property_images rows to get usage info and metadata from the DB
+      const { data: dbImages } = await supabase
+        .from('property_images')
+        .select('id, image_url, alt_text, category, created_at, property_id, properties(name)')
+        .order('created_at', { ascending: false })
+
+      // Build a lookup: image_url -> usage info
+      const usageMap = new Map<string, string[]>()
+      const dbMetaMap = new Map<string, { id: string; category: string; createdAt: string }>()
+      if (dbImages) {
+        for (const img of dbImages) {
+          const url = img.image_url
+          const propertyName = (img as any).properties?.name
+          if (!usageMap.has(url)) {
+            usageMap.set(url, [])
+          }
+          if (propertyName) {
+            usageMap.get(url)!.push(`Property: ${propertyName}`)
+          }
+          if (!dbMetaMap.has(url)) {
+            dbMetaMap.set(url, {
+              id: img.id,
+              category: img.category || 'general',
+              createdAt: img.created_at,
+            })
+          }
+        }
+      }
+
+      // List all folders in the bucket
+      const { data: topLevel } = await supabase.storage
+        .from(BUCKET_NAME)
+        .list('', { limit: 100 })
+
+      const folderNames: string[] = []
+      if (topLevel) {
+        for (const item of topLevel) {
+          // Folders have null metadata (id is null) in Supabase storage
+          if (item.id === null || !item.metadata) {
+            folderNames.push(item.name)
+          }
+        }
+      }
+
+      // If no folders found, try common folder names
+      const foldersToScan = folderNames.length > 0
+        ? folderNames
+        : ['properties', 'amenities', 'experiences', 'activities']
+
+      const allMedia: MediaItem[] = []
+
+      for (const folder of foldersToScan) {
+        const { data: files } = await supabase.storage
+          .from(BUCKET_NAME)
+          .list(folder, {
+            limit: 200,
+            sortBy: { column: 'created_at', order: 'desc' },
+          })
+
+        if (!files) continue
+
+        for (const file of files) {
+          // Skip placeholder entries (folders within folders)
+          if (!file.metadata || file.id === null) continue
+
+          const path = `${folder}/${file.name}`
+          const { data: urlData } = supabase.storage
+            .from(BUCKET_NAME)
+            .getPublicUrl(path)
+
+          const publicUrl = urlData.publicUrl
+          const dbMeta = dbMetaMap.get(publicUrl)
+
+          allMedia.push({
+            id: dbMeta?.id || file.id || path,
+            name: file.name,
+            type: file.metadata?.mimetype?.startsWith('image/') ? 'image' : 'file',
+            size: formatFileSize(file.metadata?.size || 0),
+            url: publicUrl,
+            folder,
+            uploadedAt: dbMeta?.createdAt
+              ? new Date(dbMeta.createdAt).toISOString().split('T')[0]
+              : new Date(file.created_at).toISOString().split('T')[0],
+            usedIn: usageMap.get(publicUrl) || [],
+          })
+        }
+      }
+
+      // Also include DB images that may not have been found via storage listing
+      // (e.g. externally hosted URLs)
+      if (dbImages) {
+        const storageUrls = new Set(allMedia.map((m) => m.url))
+        for (const img of dbImages) {
+          if (!storageUrls.has(img.image_url)) {
+            const propertyName = (img as any).properties?.name
+            allMedia.push({
+              id: img.id,
+              name: img.alt_text || img.image_url.split('/').pop() || 'image',
+              type: 'image',
+              size: '--',
+              url: img.image_url,
+              folder: img.category || 'general',
+              uploadedAt: new Date(img.created_at).toISOString().split('T')[0],
+              usedIn: propertyName ? [`Property: ${propertyName}`] : [],
+            })
+          }
+        }
+      }
+
+      setMedia(allMedia)
+    } catch (error) {
+      console.error('Error fetching media:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchMedia()
+  }, [fetchMedia])
+
+  // Compute folders dynamically from media items
+  const folders = [
+    { id: 'all', name: 'All Files', count: media.length },
+    ...Object.entries(
+      media.reduce<Record<string, number>>((acc, item) => {
+        acc[item.folder] = (acc[item.folder] || 0) + 1
+        return acc
+      }, {})
+    ).map(([id, count]) => ({
+      id,
+      name: id.charAt(0).toUpperCase() + id.slice(1),
+      count,
+    })),
+  ]
+
+  const filteredMedia = media.filter(item => {
     const matchesFolder = selectedFolder === 'all' || item.folder === selectedFolder
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesFolder && matchesSearch
   })
 
   const toggleSelect = (id: string) => {
-    setSelectedItems(prev => 
+    setSelectedItems(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     )
   }
@@ -91,14 +233,14 @@ export default function AdminMediaPage() {
       <div className="flex gap-6 h-[calc(100vh-12rem)]">
         {/* Sidebar - Folders */}
         <div className="w-56 shrink-0 space-y-2">
-          <Button 
-            className="w-full gap-2 mb-4" 
+          <Button
+            className="w-full gap-2 mb-4"
             onClick={() => setUploadOpen(true)}
           >
             <Upload className="w-4 h-4" />
             Upload Files
           </Button>
-          
+
           <div className="space-y-1">
             {folders.map(folder => (
               <button
@@ -106,8 +248,8 @@ export default function AdminMediaPage() {
                 onClick={() => setSelectedFolder(folder.id)}
                 className={cn(
                   'w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors',
-                  selectedFolder === folder.id 
-                    ? 'bg-primary text-primary-foreground' 
+                  selectedFolder === folder.id
+                    ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                 )}
               >
@@ -140,8 +282,8 @@ export default function AdminMediaPage() {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search files..." 
+                <Input
+                  placeholder="Search files..."
                   className="pl-10 w-64"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -194,7 +336,7 @@ export default function AdminMediaPage() {
 
           {/* Select All */}
           <div className="flex items-center gap-3 py-3 border-b border-border">
-            <button 
+            <button
               onClick={selectAll}
               className={cn(
                 'w-5 h-5 rounded border flex items-center justify-center transition-colors',
@@ -214,15 +356,40 @@ export default function AdminMediaPage() {
 
           {/* Grid / List View */}
           <div className="flex-1 overflow-y-auto py-4">
-            {viewMode === 'grid' ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <Loader2 className="w-10 h-10 animate-spin mb-4" />
+                <p className="text-sm">Loading media files...</p>
+              </div>
+            ) : media.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <Upload className="w-12 h-12 mb-4" />
+                <p className="font-medium text-foreground">No media files yet</p>
+                <p className="text-sm mt-1">Upload your first image to get started</p>
+                <Button className="mt-4 gap-2" onClick={() => setUploadOpen(true)}>
+                  <Upload className="w-4 h-4" />
+                  Upload Files
+                </Button>
+              </div>
+            ) : filteredMedia.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <ImageIcon className="w-12 h-12 mb-4" />
+                <p className="font-medium text-foreground">No files in this folder</p>
+                <p className="text-sm mt-1">
+                  {searchQuery
+                    ? `No files matching "${searchQuery}"`
+                    : 'This folder is empty'}
+                </p>
+              </div>
+            ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {filteredMedia.map(item => (
-                  <div 
+                  <div
                     key={item.id}
                     className={cn(
                       'group relative bg-card border rounded-xl overflow-hidden cursor-pointer transition-all',
-                      selectedItems.includes(item.id) 
-                        ? 'border-primary ring-2 ring-primary/20' 
+                      selectedItems.includes(item.id)
+                        ? 'border-primary ring-2 ring-primary/20'
                         : 'border-border hover:border-primary/50'
                     )}
                     onClick={() => toggleSelect(item.id)}
@@ -240,8 +407,8 @@ export default function AdminMediaPage() {
                       )}>
                         <div className={cn(
                           'w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors',
-                          selectedItems.includes(item.id) 
-                            ? 'bg-primary border-primary text-primary-foreground' 
+                          selectedItems.includes(item.id)
+                            ? 'bg-primary border-primary text-primary-foreground'
                             : 'border-white'
                         )}>
                           {selectedItems.includes(item.id) && <Check className="w-4 h-4" />}
@@ -254,9 +421,9 @@ export default function AdminMediaPage() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="absolute top-2 right-2 w-8 h-8 opacity-0 group-hover:opacity-100 bg-background/80 backdrop-blur-sm"
                         >
                           <MoreHorizontal className="w-4 h-4" />
@@ -283,17 +450,17 @@ export default function AdminMediaPage() {
             ) : (
               <div className="space-y-2">
                 {filteredMedia.map(item => (
-                  <div 
+                  <div
                     key={item.id}
                     className={cn(
                       'flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-all',
-                      selectedItems.includes(item.id) 
-                        ? 'border-primary bg-primary/5' 
+                      selectedItems.includes(item.id)
+                        ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
                     )}
                     onClick={() => toggleSelect(item.id)}
                   >
-                    <button 
+                    <button
                       className={cn(
                         'w-5 h-5 rounded border flex items-center justify-center shrink-0',
                         selectedItems.includes(item.id)

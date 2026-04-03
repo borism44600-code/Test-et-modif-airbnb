@@ -34,15 +34,50 @@ interface BookingData {
   }
 }
 
-// In production, this would fetch from database
-function getBookingById(bookingId: string): BookingData | null {
-  // Mock implementation - in production, fetch from database
-  return null
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+async function getSupabase() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll() } }
+  )
 }
 
-// In production, this would update the database
-function updateBookingStatus(
-  bookingId: string, 
+async function getBookingById(bookingId: string): Promise<BookingData | null> {
+  const supabase = await getSupabase()
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('*')
+    .eq('id', bookingId)
+    .single()
+
+  if (error || !data) return null
+
+  return {
+    id: data.id,
+    checkIn: data.check_in,
+    nights: data.nights || 1,
+    status: data.status as BookingStatus,
+    pricing: {
+      nightlyRate: data.nightly_rate || 0,
+      subtotal: data.subtotal || 0,
+      cleaningFee: data.cleaning_fee || 0,
+      extras: data.extras_total || 0,
+      total: data.total || 0,
+    },
+    payment: {
+      method: data.payment_method || 'card',
+      status: data.payment_status || 'pending',
+      captureId: data.payment_capture_id,
+    },
+  }
+}
+
+async function updateBookingStatus(
+  bookingId: string,
   status: BookingStatus,
   cancellationData: {
     cancelledAt: string
@@ -52,9 +87,26 @@ function updateBookingStatus(
     refundTransactionId?: string
     processedBy?: string
   }
-): boolean {
-  // Mock implementation - in production, update database
-  console.log('Updating booking:', bookingId, status, cancellationData)
+): Promise<boolean> {
+  const supabase = await getSupabase()
+  const { error } = await supabase
+    .from('bookings')
+    .update({
+      status,
+      cancelled_at: cancellationData.cancelledAt,
+      cancellation_reason: cancellationData.reason,
+      refund_status: cancellationData.refundStatus,
+      refund_amount: cancellationData.refundAmount,
+      refund_transaction_id: cancellationData.refundTransactionId,
+      processed_by: cancellationData.processedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', bookingId)
+
+  if (error) {
+    console.error('Error updating booking:', error)
+    return false
+  }
   return true
 }
 
@@ -77,17 +129,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // In production, fetch booking from database
-    // For now, we'll use mock data passed in the request
-    const bookingData = request.headers.get('X-Booking-Data')
-    if (!bookingData) {
+    // Fetch booking from database
+    const booking = await getBookingById(bookingId)
+    if (!booking) {
       return NextResponse.json(
-        { error: 'Booking data is required (in production, this would be fetched from database)' },
-        { status: 400 }
+        { error: 'Booking not found' },
+        { status: 404 }
       )
     }
-
-    const booking: BookingData = JSON.parse(bookingData)
 
     // Check if booking can be cancelled
     const cancelCheck = canCancelBooking({
@@ -145,7 +194,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update booking status (in production, this would update the database)
+    // Update booking status in database
     const cancellationData = {
       cancelledAt: new Date().toISOString(),
       reason,
@@ -155,7 +204,7 @@ export async function POST(request: NextRequest) {
       processedBy: processedBy || 'admin'
     }
 
-    updateBookingStatus(bookingId, 'cancelled', cancellationData)
+    await updateBookingStatus(bookingId, 'cancelled', cancellationData)
 
     return NextResponse.json({
       success: true,

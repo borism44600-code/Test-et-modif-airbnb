@@ -160,248 +160,7 @@ interface DateBlock {
   createdAt: string
 }
 
-// Mock bookings data
-const mockBookings: AdminBooking[] = [
-  {
-    id: 'BK001',
-    guest: {
-      name: 'Jean-Pierre Martin',
-      email: 'jp.martin@email.com',
-      phone: '+33 6 12 34 56 78',
-    },
-    property: { id: 'p1', name: 'Riad Jardin Secret' },
-    checkIn: '2026-04-15',
-    checkOut: '2026-04-19',
-    nights: 4,
-    guests: { adults: 2, children: 0 },
-    extras: [
-      { name: 'Airport Transfer (Round Trip)', quantity: 1, price: 60 },
-      { name: 'Breakfast', quantity: 4, price: 60 },
-    ],
-    pricing: {
-      nightlyRate: 450,
-      subtotal: 1800,
-      cleaningFee: 80,
-      extras: 120,
-      total: 2000,
-    },
-    payment: {
-      method: 'paypal',
-      status: 'paid',
-      transactionId: 'PAYID-MXYZ123456789',
-      captureId: 'CAP-123456789',
-      paidAt: '2026-03-15T10:30:00Z',
-    },
-    status: 'confirmed',
-    source: 'website',
-    services: {
-      bookingId: 'BK001',
-      breakfasts: [
-        { id: 'BF-001', bookingId: 'BK001', date: '2026-04-15', numberOfGuests: 2, pricePerPerson: 25, total: 50, status: 'confirmed', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-        { id: 'BF-002', bookingId: 'BK001', date: '2026-04-16', numberOfGuests: 2, pricePerPerson: 25, total: 50, status: 'confirmed', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-        { id: 'BF-003', bookingId: 'BK001', date: '2026-04-17', numberOfGuests: 2, pricePerPerson: 25, total: 50, status: 'pending', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-        { id: 'BF-004', bookingId: 'BK001', date: '2026-04-18', numberOfGuests: 2, pricePerPerson: 25, total: 50, status: 'pending', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-      ],
-      meals: [
-        { id: 'ML-001', bookingId: 'BK001', date: '2026-04-16', mealType: 'dinner', numberOfAdults: 2, numberOfChildren: 0, pricePerAdult: 60, pricePerChild: 35, total: 120, status: 'confirmed', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-      ],
-      taxis: [
-        { id: 'TX-001', bookingId: 'BK001', date: '2026-04-15', time: '14:30', direction: 'airport_to_property', numberOfPassengers: 2, flightNumber: 'AT823', price: 25, status: 'confirmed', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-        { id: 'TX-002', bookingId: 'BK001', date: '2026-04-19', time: '10:00', direction: 'property_to_airport', numberOfPassengers: 2, price: 25, status: 'pending', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-      ],
-      otherServices: [
-        { id: 'SP-001', bookingId: 'BK001', serviceType: 'spa', serviceName: 'Traditional Hammam', date: '2026-04-17', time: '15:00', numberOfAdults: 2, duration: '60min', pricePerAdult: 45, total: 90, status: 'pending', createdAt: '2026-03-15T10:30:00Z', updatedAt: '2026-03-15T10:30:00Z' },
-      ],
-      totalServicesAmount: 460
-    },
-    createdAt: '2026-03-15T10:25:00Z',
-    updatedAt: '2026-03-15T10:30:00Z',
-  },
-  {
-    id: 'BK002',
-    guest: {
-      name: 'Sarah Williams',
-      email: 'sarah.w@email.com',
-      phone: '+44 7700 900123',
-    },
-    property: { id: 'p2', name: 'Villa Palmeraie Oasis' },
-    checkIn: '2026-04-20',
-    checkOut: '2026-04-27',
-    nights: 7,
-    guests: { adults: 6, children: 2 },
-    extras: [
-      { name: 'Private Driver (Full Day)', quantity: 2, price: 400 },
-      { name: 'Chef Service (Dinner)', quantity: 3, price: 450 },
-    ],
-    pricing: {
-      nightlyRate: 1200,
-      subtotal: 8400,
-      cleaningFee: 150,
-      extras: 850,
-      total: 9400,
-    },
-    payment: {
-      method: 'paypal',
-      status: 'pending',
-    },
-    status: 'pending',
-    source: 'website',
-    notes: 'Guest requested late check-out if possible',
-    services: {
-      bookingId: 'BK002',
-      breakfasts: [
-        { id: 'BF-010', bookingId: 'BK002', date: '2026-04-21', numberOfGuests: 8, pricePerPerson: 25, total: 200, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-        { id: 'BF-011', bookingId: 'BK002', date: '2026-04-22', numberOfGuests: 8, pricePerPerson: 25, total: 200, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-      ],
-      meals: [
-        { id: 'ML-010', bookingId: 'BK002', date: '2026-04-21', mealType: 'dinner', numberOfAdults: 6, numberOfChildren: 2, pricePerAdult: 60, pricePerChild: 35, total: 430, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-        { id: 'ML-011', bookingId: 'BK002', date: '2026-04-24', mealType: 'lunch', numberOfAdults: 6, numberOfChildren: 2, pricePerAdult: 45, pricePerChild: 25, total: 320, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-      ],
-      taxis: [
-        { id: 'TX-010', bookingId: 'BK002', date: '2026-04-20', time: '15:00', direction: 'airport_to_property', numberOfPassengers: 8, price: 45, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-      ],
-      otherServices: [
-        { id: 'EX-010', bookingId: 'BK002', serviceType: 'excursion', serviceName: 'Atlas Mountains Day Trip', date: '2026-04-23', time: '08:30', numberOfAdults: 6, numberOfChildren: 2, duration: 'full_day', pricePerAdult: 85, pricePerChild: 45, total: 600, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-        { id: 'DR-010', bookingId: 'BK002', serviceType: 'driver', serviceName: 'Private Driver - Full Day', date: '2026-04-25', numberOfAdults: 8, duration: 'full_day', pricePerAdult: 150, total: 150, status: 'pending', createdAt: '2026-03-20T14:15:00Z', updatedAt: '2026-03-20T14:15:00Z' },
-      ],
-      totalServicesAmount: 1945
-    },
-    createdAt: '2026-03-20T14:15:00Z',
-    updatedAt: '2026-03-20T14:15:00Z',
-  },
-  {
-    id: 'BK003',
-    guest: {
-      name: 'Mohammed Al-Rashid',
-      email: 'm.alrashid@email.com',
-      phone: '+971 50 123 4567',
-    },
-    property: { id: 'p3', name: 'Riad Ambre & Epices' },
-    checkIn: '2026-04-05',
-    checkOut: '2026-04-08',
-    nights: 3,
-    guests: { adults: 2, children: 0 },
-    extras: [],
-    pricing: {
-      nightlyRate: 320,
-      subtotal: 960,
-      cleaningFee: 50,
-      extras: 0,
-      total: 1010,
-    },
-    payment: {
-      method: 'card',
-      status: 'paid',
-      transactionId: 'pi_3NxABC987654321',
-      paidAt: '2026-03-18T08:45:00Z',
-    },
-    status: 'confirmed',
-    source: 'airbnb',
-    createdAt: '2026-03-18T08:40:00Z',
-    updatedAt: '2026-03-18T08:45:00Z',
-  },
-  {
-    id: 'BK004',
-    guest: {
-      name: 'Emma Thompson',
-      email: 'emma.t@email.com',
-      phone: '+1 555 123 4567',
-    },
-    property: { id: 'p4', name: 'Apartment Hivernage Elite' },
-    checkIn: '2026-04-07',
-    checkOut: '2026-04-14',
-    nights: 7,
-    guests: { adults: 2, children: 1 },
-    extras: [
-      { name: 'Airport Transfer (One Way)', quantity: 1, price: 35 },
-    ],
-    pricing: {
-      nightlyRate: 180,
-      subtotal: 1260,
-      cleaningFee: 40,
-      extras: 35,
-      total: 1335,
-    },
-    payment: {
-      method: 'paypal',
-      status: 'refunded',
-      transactionId: 'PAYID-NXDEF456789012',
-      captureId: 'CAP-456789012',
-    },
-    status: 'cancelled',
-    cancellation: {
-      cancelledAt: '2026-03-25T09:00:00Z',
-      reason: 'Travel restrictions',
-      refundStatus: 'completed',
-      refundAmount: 975,
-      refundTransactionId: 'REF-123456789',
-      processedBy: 'Admin'
-    },
-    source: 'website',
-    notes: 'Cancelled due to travel restrictions',
-    createdAt: '2026-03-10T16:20:00Z',
-    updatedAt: '2026-03-25T09:00:00Z',
-  },
-  {
-    id: 'BK005',
-    guest: {
-      name: 'David Chen',
-      email: 'd.chen@email.com',
-      phone: '+86 138 1234 5678',
-    },
-    property: { id: 'p5', name: 'Villa Atlas Retreat' },
-    checkIn: '2026-04-25',
-    checkOut: '2026-05-02',
-    nights: 7,
-    guests: { adults: 4, children: 2 },
-    extras: [
-      { name: 'Excursion - Atlas Mountains', quantity: 6, price: 480 },
-      { name: 'Breakfast', quantity: 7, price: 105 },
-    ],
-    pricing: {
-      nightlyRate: 950,
-      subtotal: 6650,
-      cleaningFee: 120,
-      extras: 585,
-      total: 7355,
-    },
-    payment: {
-      method: 'bank_transfer',
-      status: 'paid',
-      transactionId: 'BT-2026-0412-001',
-      paidAt: '2026-03-28T11:00:00Z',
-    },
-    status: 'confirmed',
-    source: 'manual',
-    notes: 'VIP guest - repeat customer',
-    createdAt: '2026-03-25T10:00:00Z',
-    updatedAt: '2026-03-28T11:00:00Z',
-  },
-]
-
-// Mock date blocks
-const mockDateBlocks: DateBlock[] = [
-  {
-    id: 'DB001',
-    propertyId: 'p1',
-    propertyName: 'Riad Jardin Secret',
-    startDate: '2026-05-01',
-    endDate: '2026-05-05',
-    type: 'maintenance',
-    reason: 'Annual pool maintenance',
-    createdAt: '2026-03-01T10:00:00Z',
-  },
-  {
-    id: 'DB002',
-    propertyId: 'p2',
-    propertyName: 'Villa Palmeraie Oasis',
-    startDate: '2026-06-15',
-    endDate: '2026-06-22',
-    type: 'owner_use',
-    reason: 'Owner family visit',
-    createdAt: '2026-03-15T14:00:00Z',
-  },
-]
+// Bookings and date blocks are fetched from Supabase (empty until real data exists)
 
 const statusConfig: Record<string, { label: string; color: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Clock }> = {
   pending: { label: 'Pending', color: 'secondary', icon: Clock },
@@ -471,8 +230,12 @@ export default function AdminBookingsPage() {
   // Manual booking dialog
   const [manualBookingOpen, setManualBookingOpen] = useState(false)
 
+  // Bookings and date blocks — empty until real data is fetched from Supabase
+  const [bookings] = useState<AdminBooking[]>([])
+  const [dateBlocks] = useState<DateBlock[]>([])
+
   // Filter bookings
-  const filteredBookings = mockBookings.filter(booking => {
+  const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
       booking.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.guest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -486,10 +249,10 @@ export default function AdminBookingsPage() {
   })
 
   // Stats
-  const confirmedCount = mockBookings.filter(b => b.status === 'confirmed' || b.status === 'paid').length
-  const pendingCount = mockBookings.filter(b => b.status === 'pending').length
-  const cancelledCount = mockBookings.filter(b => b.status === 'cancelled').length
-  const totalRevenue = mockBookings
+  const confirmedCount = bookings.filter(b => b.status === 'confirmed' || b.status === 'paid').length
+  const pendingCount = bookings.filter(b => b.status === 'pending').length
+  const cancelledCount = bookings.filter(b => b.status === 'cancelled').length
+  const totalRevenue = bookings
     .filter(b => b.status !== 'cancelled' && b.payment.status === 'paid')
     .reduce((sum, b) => sum + b.pricing.total, 0)
 
@@ -714,6 +477,17 @@ export default function AdminBookingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {filteredBookings.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="h-32 text-center">
+                          <div className="flex flex-col items-center justify-center text-muted-foreground">
+                            <Calendar className="w-10 h-10 mb-3" />
+                            <p className="font-medium text-foreground">No bookings yet</p>
+                            <p className="text-sm mt-1">Bookings will appear here when guests make reservations.</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                     {filteredBookings.map((booking) => {
                       const statusInfo = statusConfig[booking.status] || statusConfig.pending
                       const StatusIcon = statusInfo.icon
@@ -799,7 +573,7 @@ export default function AdminBookingsPage() {
 
             {/* Summary */}
             <div className="text-sm text-muted-foreground">
-              Showing {filteredBookings.length} of {mockBookings.length} bookings
+              Showing {filteredBookings.length} of {bookings.length} bookings
             </div>
           </>
         ) : (
@@ -828,7 +602,18 @@ export default function AdminBookingsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockDateBlocks.map((block) => (
+                  {dateBlocks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-32 text-center">
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                          <CalendarOff className="w-10 h-10 mb-3" />
+                          <p className="font-medium text-foreground">No blocked dates</p>
+                          <p className="text-sm mt-1">Block dates for maintenance, owner use, or other reasons.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {dateBlocks.map((block) => (
                     <TableRow key={block.id}>
                       <TableCell className="font-medium">{block.propertyName}</TableCell>
                       <TableCell>{formatDate(block.startDate)}</TableCell>

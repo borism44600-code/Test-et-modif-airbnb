@@ -88,7 +88,7 @@ export interface DbProperty {
   }[]
 }
 
-// UI property type (matching existing mockProperties format)
+// UI property type used across the frontend
 export interface UiProperty {
   id: string
   slug: string

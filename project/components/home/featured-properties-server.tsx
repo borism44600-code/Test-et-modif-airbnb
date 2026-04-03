@@ -1,7 +1,7 @@
 /**
  * Server wrapper pour FeaturedProperties.
  * Fetch les propriétés en vedette depuis Supabase, passe les données au composant client.
- * Si la DB est vide ou inaccessible, retombe sur les mocks.
+ * Si la DB est vide, affiche un état vide.
  */
 import { fetchPublishedProperties } from '@/lib/data-fetcher'
 import { FeaturedPropertiesClient } from './featured-properties-client'
