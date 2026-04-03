@@ -23,36 +23,13 @@ import {
 } from '@/components/ui/select'
 import { AdminLayout } from '@/components/admin/admin-layout'
 import { updatePropertyAction, addPropertyImageAction, deletePropertyImageAction, setCoverImageAction } from '@/app/admin/actions'
+import { propertyFormSchema, dbToFormData, type PropertyFormData } from '@/lib/validations/property'
 
 interface PropertyEditFormProps {
-  property: {
+  property: Record<string, unknown> & {
     id: string
-    title: string
+    title?: string
     slug: string
-    type: string
-    description_short?: string
-    description_long?: string
-    city: string
-    district?: string
-    address?: string
-    map_location?: string
-    price_per_night: number
-    cleaning_fee?: number
-    service_fee?: number
-    num_bedrooms: number
-    num_bathrooms: number
-    bedroom_guest_capacity?: number
-    additional_guest_capacity?: number
-    total_guest_capacity: number
-    amenities?: string[]
-    parking_type?: string
-    parking_spots?: number
-    parking_notes?: string
-    seo_title?: string
-    seo_description?: string
-    seo_keywords?: string[]
-    status: string
-    featured?: boolean
     property_images?: {
       id: string
       image_url: string
@@ -65,7 +42,8 @@ interface PropertyEditFormProps {
       room_name: string
       room_number?: number
       bed_type?: string
-      num_beds?: number
+      bed_count?: number
+      max_guests?: number
       has_bathroom?: boolean
       has_shower?: boolean
       has_bathtub?: boolean
@@ -101,39 +79,18 @@ export function PropertyEditForm({ property }: PropertyEditFormProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  // Form state initialized from property
+  // Form state initialized from DB row via canonical mapper
   const syncData = property.availability_sync?.[0] || {}
-  
-  const [formData, setFormData] = useState({
-    title: property.title || '',
-    slug: property.slug || '',
-    type: property.type || 'riad',
-    shortDescription: property.description_short || '',
-    description: property.description_long || '',
-    status: property.status || 'draft',
-    featured: property.featured || false,
-    city: property.city || 'Marrakech',
-    district: property.district || '',
-    address: property.address || '',
-    mapLocation: property.map_location || '',
-    numberOfBedrooms: property.num_bedrooms || 1,
-    numberOfBathrooms: property.num_bathrooms || 1,
-    bedroomGuestCapacity: property.bedroom_guest_capacity || 2,
-    additionalGuestCapacity: property.additional_guest_capacity || 0,
-    totalGuestCapacity: property.total_guest_capacity || 2,
-    pricePerNight: property.price_per_night || 0,
-    cleaningFee: property.cleaning_fee || 0,
-    serviceFee: property.service_fee || 0,
-    parkingType: property.parking_type || 'none',
-    parkingSpots: property.parking_spots || 0,
-    parkingNotes: property.parking_notes || '',
-    seoTitle: property.seo_title || '',
-    seoDescription: property.seo_description || '',
-    seoKeywords: (property.seo_keywords || []).join(', '),
-    airbnbIcalUrl: syncData.airbnb_ical_url || '',
-    bookingIcalUrl: syncData.booking_ical_url || '',
-    internalIcalUrl: syncData.internal_ical_url || '',
+  const initialFormData = dbToFormData({
+    ...property,
+    // Merge sync data URLs if present
+    airbnb_ical_url: property.airbnb_ical_url || syncData.airbnb_ical_url,
+    booking_ical_url: property.booking_ical_url || syncData.booking_ical_url,
+    internal_ical_url: property.internal_ical_url || syncData.internal_ical_url,
   })
+
+  const [formData, setFormData] = useState(initialFormData)
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null)
 
   const handleInputChange = (field: string, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -143,43 +100,27 @@ export function PropertyEditForm({ property }: PropertyEditFormProps) {
   const handleSave = async (publish = false) => {
     setIsSaving(true)
     setSaveSuccess(false)
-    
+    setSaveErrorMsg(null)
+
     try {
-      const propertyData = {
-        title: formData.title,
-        slug: formData.slug,
-        type: formData.type as 'riad' | 'villa' | 'apartment' | 'house',
-        description_short: formData.shortDescription,
-        description_long: formData.description,
-        city: formData.city,
-        district: formData.district,
-        address: formData.address,
-        map_location: formData.mapLocation,
-        price_per_night: formData.pricePerNight,
-        cleaning_fee: formData.cleaningFee,
-        service_fee: formData.serviceFee,
-        num_bedrooms: formData.numberOfBedrooms,
-        num_bathrooms: formData.numberOfBathrooms,
-        bedroom_guest_capacity: formData.bedroomGuestCapacity,
-        additional_guest_capacity: formData.additionalGuestCapacity,
-        total_guest_capacity: formData.totalGuestCapacity,
-        parking_type: formData.parkingType,
-        parking_spots: formData.parkingSpots,
-        parking_notes: formData.parkingNotes,
-        seo_title: formData.seoTitle,
-        seo_description: formData.seoDescription,
-        seo_keywords: formData.seoKeywords ? formData.seoKeywords.split(',').map(k => k.trim()).filter(Boolean) : [],
+      // Prepare payload matching the Zod schema
+      const payload: PropertyFormData = {
+        ...formData,
         status: publish ? 'published' : formData.status,
-        featured: formData.featured,
-        airbnb_ical_url: formData.airbnbIcalUrl,
-        booking_ical_url: formData.bookingIcalUrl,
-        internal_ical_url: formData.internalIcalUrl
       }
 
-      const result = await updatePropertyAction(property.id, propertyData)
+      // Client-side validation
+      const validated = propertyFormSchema.safeParse(payload)
+      if (!validated.success) {
+        const firstError = validated.error.issues[0]
+        setSaveErrorMsg(`Validation: ${firstError.path.join('.')} — ${firstError.message}`)
+        return
+      }
+
+      const result = await updatePropertyAction(property.id, payload)
 
       if (result.error) {
-        alert(`Erreur lors de la sauvegarde : ${result.error}`)
+        setSaveErrorMsg(result.error)
         return
       }
 
@@ -187,7 +128,7 @@ export function PropertyEditForm({ property }: PropertyEditFormProps) {
       router.refresh()
     } catch (error) {
       console.error('Error updating property:', error)
-      alert('Failed to save property. Please try again.')
+      setSaveErrorMsg('Failed to save property. Please try again.')
     } finally {
       setIsSaving(false)
     }
@@ -247,6 +188,16 @@ export function PropertyEditForm({ property }: PropertyEditFormProps) {
 
         {/* Form Content */}
         <div className="flex-1 space-y-6">
+          {/* Error Banner */}
+          {saveErrorMsg && (
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
+              <span className="text-destructive font-medium text-sm flex-1">{saveErrorMsg}</span>
+              <button onClick={() => setSaveErrorMsg(null)} className="text-destructive/70 hover:text-destructive text-sm">
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {/* Header Actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

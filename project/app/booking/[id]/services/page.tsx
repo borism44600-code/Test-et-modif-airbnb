@@ -3,9 +3,9 @@
 import { useState, useEffect, use } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { 
-  ArrowLeft, Calendar, MapPin, Users, CheckCircle2, 
-  AlertCircle, Clock, Home
+import {
+  ArrowLeft, Calendar, MapPin, Users, CheckCircle2,
+  AlertCircle, Clock, Home, Loader2
 } from 'lucide-react'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
@@ -13,35 +13,68 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ServicesSelector } from '@/components/booking/services-selector'
 import { BookingServicesView } from '@/components/admin/booking-services-view'
-import type { 
-  BreakfastBooking, 
-  MealBooking, 
-  TaxiBooking, 
+import type {
+  BreakfastBooking,
+  MealBooking,
+  TaxiBooking,
   OtherServiceBooking,
-  BookingServices 
+  BookingServices
 } from '@/lib/service-booking'
 import { createEmptyBookingServices, calculateTotalServices } from '@/lib/service-booking'
+import { createClient } from '@/lib/supabase/client'
 
-// Mock booking data - in production this would come from API
-const mockBookingData = {
-  id: 'BK001',
-  propertyName: 'Riad Jardin Secret',
-  checkIn: '2026-04-15',
-  checkOut: '2026-04-19',
-  guests: {
-    adults: 2,
-    children: 0
-  },
-  status: 'confirmed' as const,
-  services: createEmptyBookingServices('BK001')
+interface BookingData {
+  id: string
+  propertyName: string
+  checkIn: string
+  checkOut: string
+  guests: { adults: number; children: number }
+  status: 'pending' | 'confirmed' | 'paid' | 'cancelled'
+  services: BookingServices
 }
 
 export default function BookingServicesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [booking] = useState(mockBookingData)
-  const [services, setServices] = useState<BookingServices>(booking.services)
+  const [booking, setBooking] = useState<BookingData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [services, setServices] = useState<BookingServices>(createEmptyBookingServices(id))
   const [isEditing, setIsEditing] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  useEffect(() => {
+    async function fetchBooking() {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('id, property_id, check_in, check_out, guests_adults, guests_children, status, properties(name)')
+          .eq('id', id)
+          .single()
+
+        if (data && !error) {
+          const bookingData: BookingData = {
+            id: data.id,
+            propertyName: (data as any).properties?.name || 'Property',
+            checkIn: data.check_in,
+            checkOut: data.check_out,
+            guests: {
+              adults: data.guests_adults || 2,
+              children: data.guests_children || 0,
+            },
+            status: data.status || 'confirmed',
+            services: createEmptyBookingServices(data.id),
+          }
+          setBooking(bookingData)
+          setServices(bookingData.services)
+        }
+      } catch (err) {
+        console.error('Error fetching booking:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBooking()
+  }, [id])
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-GB', {
@@ -73,9 +106,49 @@ export default function BookingServicesPage({ params }: { params: Promise<{ id: 
     setTimeout(() => setSaveSuccess(false), 3000)
   }
 
-  const nights = Math.ceil(
+  const nights = booking ? Math.ceil(
     (new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / (1000 * 60 * 60 * 24)
-  )
+  ) : 0
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="pt-24 pb-16">
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <Loader2 className="w-10 h-10 animate-spin mb-4" />
+            <p>Loading booking details...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  if (!booking) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="pt-24 pb-16">
+          <div className="container max-w-4xl mx-auto px-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Home
+            </Link>
+            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+              <AlertCircle className="w-12 h-12 mb-4" />
+              <p className="font-medium text-foreground text-lg">Booking not found</p>
+              <p className="text-sm mt-1">This booking does not exist or has been removed.</p>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -84,7 +157,7 @@ export default function BookingServicesPage({ params }: { params: Promise<{ id: 
       <main className="pt-24 pb-16">
         <div className="container max-w-4xl mx-auto px-4">
           {/* Back Link */}
-          <Link 
+          <Link
             href={`/booking/${id}`}
             className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
           >

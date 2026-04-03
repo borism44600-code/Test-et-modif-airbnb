@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dialog'
 import { AdminLayout } from '@/components/admin/admin-layout'
 import { CalendarSync, CalendarSyncStatusBadge } from '@/components/admin/calendar-sync'
-import { mockProperties } from '@/lib/data'
+import { fetchPublishedPropertiesClient } from '@/lib/data-fetcher-client'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
 import { cn } from '@/lib/utils'
 
 interface PropertySyncStatus {
@@ -31,8 +32,13 @@ export default function AdminCalendarPage() {
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null)
   const [syncStatuses, setSyncStatuses] = useState<PropertySyncStatus[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  
-  const selectedPropertyData = mockProperties.find(p => p.id === selectedProperty)
+  const [properties, setProperties] = useState<UiProperty[]>([])
+
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(setProperties)
+  }, [])
+
+  const selectedPropertyData = properties.find(p => p.id === selectedProperty)
 
   // Fetch all sync statuses
   useEffect(() => {
@@ -130,7 +136,7 @@ export default function AdminCalendarPage() {
 
         {/* Properties Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockProperties.map((property) => {
+          {properties.map((property) => {
             const status = getPropertyStatus(property.id)
             
             return (
@@ -148,7 +154,7 @@ export default function AdminCalendarPage() {
                 {/* Property Image */}
                 <div className="relative h-32">
                   <Image
-                    src={property.images[0]}
+                    src={property.images[0] || '/placeholder-property.jpg'}
                     alt={property.title}
                     fill
                     className="object-cover"

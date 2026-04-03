@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Image from 'next/image'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { PropertyFilters, PropertyFiltersState } from '@/components/properties/property-filters'
 import { PropertiesGrid } from '@/components/properties/properties-grid'
 import { DisplayModeToggle, DisplayMode } from '@/components/properties/display-mode-toggle'
-import { mockProperties } from '@/lib/data'
+import { fetchPublishedPropertiesClient } from '@/lib/data-fetcher-client'
 import { Property, PropertyFeatures } from '@/lib/types'
 
 const defaultFilters: PropertyFiltersState = {
@@ -35,8 +35,13 @@ interface PropertyCategoryPageProps {
 export function PropertyCategoryPage({ config }: PropertyCategoryPageProps) {
   const [filters, setFilters] = useState<PropertyFiltersState>(defaultFilters)
   const [displayMode, setDisplayMode] = useState<DisplayMode>('medium')
+  const [allProperties, setAllProperties] = useState<Property[]>([])
 
-  const categoryProperties = mockProperties.filter(p => p.type === config.type)
+  useEffect(() => {
+    fetchPublishedPropertiesClient().then(props => setAllProperties(props as unknown as Property[]))
+  }, [])
+
+  const categoryProperties = allProperties.filter(p => p.type === config.type)
 
   const filteredProperties = useMemo(() => {
     return categoryProperties.filter(property => {
@@ -122,10 +127,21 @@ export function PropertyCategoryPage({ config }: PropertyCategoryPageProps) {
                 </div>
               </div>
 
-              <PropertiesGrid 
-                properties={filteredProperties} 
-                displayMode={displayMode}
-              />
+              {filteredProperties.length === 0 ? (
+                <div className="text-center py-16 border border-dashed border-border rounded-xl">
+                  <p className="text-muted-foreground font-medium">No {config.pluralName} found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {categoryProperties.length === 0
+                      ? `Our ${config.pluralName} will appear here once they are published.`
+                      : 'Try adjusting your filters to see more results.'}
+                  </p>
+                </div>
+              ) : (
+                <PropertiesGrid
+                  properties={filteredProperties}
+                  displayMode={displayMode}
+                />
+              )}
             </div>
           </div>
         </div>

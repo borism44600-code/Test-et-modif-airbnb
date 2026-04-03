@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 60 // Revalidate every minute
 
 export default async function PropertiesPage() {
-  // Fetch properties from database (falls back to mock data if empty)
+  // Fetch published properties from Supabase
   const properties = await fetchPublishedProperties()
 
   return <PropertiesClient initialProperties={properties} />

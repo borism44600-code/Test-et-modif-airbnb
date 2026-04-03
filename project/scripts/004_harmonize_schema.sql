@@ -1,24 +1,23 @@
 -- ============================================================================
--- SCRIPT 004 — HARMONISATION SCHEMA
--- Aligne les colonnes Supabase avec ce que le code envoie réellement.
--- Idempotent : peut être rejoué sans risque (IF NOT EXISTS partout).
+-- SCRIPT 004 — HARMONIZE SCHEMA
+-- Adds all columns the code actually writes to.
+-- Idempotent: can be re-run safely (IF NOT EXISTS everywhere).
 -- ============================================================================
 
 DO $$ BEGIN
 
-  -- -------------------------------------------------------------------------
-  -- PROPERTIES — colonnes attendues par actions.ts / new/page.tsx
-  -- -------------------------------------------------------------------------
+  -- -----------------------------------------------------------------------
+  -- PROPERTIES — columns written by the admin form (camelCase → snake_case)
+  -- -----------------------------------------------------------------------
 
-  -- title (le code envoie "title", la table avait "name_en")
+  -- title (code sends "title", original table had "name_en")
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='title') THEN
     ALTER TABLE public.properties ADD COLUMN title TEXT;
-    -- Backfill depuis name_en si la colonne existe déjà
     UPDATE public.properties SET title = name_en WHERE title IS NULL AND name_en IS NOT NULL;
   END IF;
 
-  -- type ('riad'|'villa'|'apartment'|'house') — la table avait "category"
+  -- type ('riad'|'villa'|'apartment'|'house') — table had "category"
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='type') THEN
     ALTER TABLE public.properties ADD COLUMN type TEXT DEFAULT 'riad';
@@ -29,9 +28,14 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='status') THEN
     ALTER TABLE public.properties ADD COLUMN status TEXT DEFAULT 'draft';
-    -- Backfill depuis is_active
     UPDATE public.properties SET status = CASE WHEN is_active THEN 'published' ELSE 'draft' END
       WHERE status IS NULL;
+  END IF;
+
+  -- subtitle
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='properties' AND column_name='subtitle') THEN
+    ALTER TABLE public.properties ADD COLUMN subtitle TEXT;
   END IF;
 
   -- description_short
@@ -50,14 +54,20 @@ DO $$ BEGIN
       WHERE description_long IS NULL AND description_en IS NOT NULL;
   END IF;
 
-  -- num_bedrooms (le code envoie "num_bedrooms", la table avait "bedrooms")
+  -- city
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='properties' AND column_name='city') THEN
+    ALTER TABLE public.properties ADD COLUMN city TEXT DEFAULT 'Marrakech';
+  END IF;
+
+  -- num_bedrooms
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='num_bedrooms') THEN
     ALTER TABLE public.properties ADD COLUMN num_bedrooms INTEGER DEFAULT 1;
     UPDATE public.properties SET num_bedrooms = bedrooms WHERE num_bedrooms IS NULL;
   END IF;
 
-  -- num_bathrooms (le code envoie "num_bathrooms", la table avait "bathrooms")
+  -- num_bathrooms
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='num_bathrooms') THEN
     ALTER TABLE public.properties ADD COLUMN num_bathrooms INTEGER DEFAULT 1;
@@ -77,14 +87,14 @@ DO $$ BEGIN
     ALTER TABLE public.properties ADD COLUMN service_fee NUMERIC DEFAULT 0;
   END IF;
 
-  -- map_location (le code envoie "map_location", script 003 avait créé "map_url")
+  -- map_location
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='map_location') THEN
     ALTER TABLE public.properties ADD COLUMN map_location TEXT;
     UPDATE public.properties SET map_location = map_url WHERE map_location IS NULL AND map_url IS NOT NULL;
   END IF;
 
-  -- seo_title (le code envoie "seo_title", script 003 avait créé "meta_title")
+  -- seo_title
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='seo_title') THEN
     ALTER TABLE public.properties ADD COLUMN seo_title TEXT;
@@ -105,8 +115,31 @@ DO $$ BEGIN
     ALTER TABLE public.properties ADD COLUMN seo_keywords TEXT[] DEFAULT '{}';
   END IF;
 
-  -- airbnb_ical_url / booking_ical_url / internal_ical_url sur properties
-  -- (ces URLs sont aussi dans availability_sync, mais le form les envoie direct)
+  -- nearby_info
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='properties' AND column_name='nearby_info') THEN
+    ALTER TABLE public.properties ADD COLUMN nearby_info TEXT;
+  END IF;
+
+  -- currency
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='properties' AND column_name='currency') THEN
+    ALTER TABLE public.properties ADD COLUMN currency TEXT DEFAULT 'EUR';
+  END IF;
+
+  -- price_display_note
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='properties' AND column_name='price_display_note') THEN
+    ALTER TABLE public.properties ADD COLUMN price_display_note TEXT;
+  END IF;
+
+  -- parking_notes
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_name='properties' AND column_name='parking_notes') THEN
+    ALTER TABLE public.properties ADD COLUMN parking_notes TEXT;
+  END IF;
+
+  -- iCal URLs on properties (also in availability_sync, but form writes both)
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='properties' AND column_name='airbnb_ical_url') THEN
     ALTER TABLE public.properties ADD COLUMN airbnb_ical_url TEXT;
@@ -122,9 +155,9 @@ DO $$ BEGIN
     ALTER TABLE public.properties ADD COLUMN internal_ical_url TEXT;
   END IF;
 
-  -- -------------------------------------------------------------------------
-  -- PARTNERS — status manquait (code envoie status, table n'avait que is_active)
-  -- -------------------------------------------------------------------------
+  -- -----------------------------------------------------------------------
+  -- PARTNERS — status, featured, flat description columns
+  -- -----------------------------------------------------------------------
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_name='partners' AND column_name='status') THEN
     ALTER TABLE public.partners ADD COLUMN status TEXT DEFAULT 'draft';
@@ -168,10 +201,9 @@ DO $$ BEGIN
 END $$;
 
 -- ============================================================================
--- RLS POLICIES — s'assurer que l'admin peut tout écrire
+-- RLS POLICIES — ensure admin can write
 -- ============================================================================
 
--- Properties : lecture publique + écriture admin
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies WHERE tablename='properties' AND policyname='Admin write access for properties'
@@ -181,26 +213,9 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Bookings : lecture + écriture sans restriction (géré par cookie admin en app)
-DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename='bookings' AND policyname='Admin full access for bookings'
-  ) THEN
-    CREATE POLICY "Admin full access for bookings" ON public.bookings
-      FOR ALL USING (true) WITH CHECK (true);
-  END IF;
-END $$;
-
 -- ============================================================================
--- COMMENTAIRE DE RÉFÉRENCE : colonnes actives attendues par le code
+-- INDEXES
 -- ============================================================================
--- properties : id, slug, title, type, status, featured, description_short,
---   description_long, city, district, sub_district, address, map_location,
---   price_per_night, cleaning_fee, service_fee, security_deposit,
---   num_bedrooms, num_bathrooms, bedroom_guest_capacity,
---   additional_guest_capacity, total_guest_capacity,
---   amenities (JSONB), features (JSONB), images (JSONB), cover_image,
---   parking_type, parking_spots, parking_notes,
---   airbnb_ical_url, booking_ical_url, internal_ical_url,
---   seo_title, seo_description, seo_keywords,
---   instant_booking, minimum_stay, created_at, updated_at
+CREATE INDEX IF NOT EXISTS idx_properties_status ON public.properties(status);
+CREATE INDEX IF NOT EXISTS idx_properties_type ON public.properties(type);
+CREATE INDEX IF NOT EXISTS idx_properties_featured ON public.properties(featured) WHERE featured = true;

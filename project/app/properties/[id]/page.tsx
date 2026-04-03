@@ -16,8 +16,8 @@ import { ImageGallery } from '@/components/properties/image-gallery'
 import { AvailabilityCalendar } from '@/components/properties/availability-calendar'
 import { Button } from '@/components/ui/button'
 import { MiniTestimonial } from '@/components/ui/social-proof'
-import { mockProperties, mockServices, mockAddons } from '@/lib/data'
-import { getPropertyBySlugClient as fetchPropertyBySlug } from '@/lib/data-fetcher-client'
+import { getPropertyBySlugClient as fetchPropertyBySlug, fetchServicesClient, fetchAddonsClient } from '@/lib/data-fetcher-client'
+import type { UiProperty } from '@/lib/adapters/property-adapter'
 import { FEATURE_LABELS, BED_TYPE_LABELS, BATHROOM_TYPE_LABELS, type PropertyFeatures, type SleepingSpace } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -47,34 +47,27 @@ const propertyStories = {
 
 export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [property, setProperty] = useState<typeof mockProperties[0] | null>(null)
+  const [property, setProperty] = useState<UiProperty | null>(null)
+  const [services, setServices] = useState<{ id: string; name: string; category: string; description: string; image: string }[]>([])
+  const [addons, setAddons] = useState<{ id: string; name: string; pricePerPerson?: number; priceFlat?: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadProperty() {
       try {
-        // Try to fetch from database first
         const dbProperty = await fetchPropertyBySlug(id)
         if (dbProperty) {
           setProperty(dbProperty)
-        } else {
-          // Fallback to mock data for demo
-          const mockProperty = mockProperties.find(p => p.id === id || p.slug === id)
-          if (mockProperty) {
-            setProperty(mockProperty)
-          }
         }
-      } catch (error) {
-        // Fallback to mock data on error
-        const mockProperty = mockProperties.find(p => p.id === id || p.slug === id)
-        if (mockProperty) {
-          setProperty(mockProperty)
-        }
+      } catch {
+        // Property not found — will show notFound()
       } finally {
         setLoading(false)
       }
     }
     loadProperty()
+    fetchServicesClient().then(setServices)
+    fetchAddonsClient().then(setAddons)
   }, [id])
 
   if (loading) {
@@ -99,11 +92,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     notFound()
   }
 
-  const activeFeatures = (Object.entries(property.features) as [keyof PropertyFeatures, boolean][])
+  const features = property.features || {} as PropertyFeatures
+  const activeFeatures = (Object.entries(features) as [keyof PropertyFeatures, boolean][])
     .filter(([, value]) => value)
     .map(([key]) => ({ key, label: FEATURE_LABELS[key] }))
 
-  const story = propertyStories[property.type]
+  const propertyType = property.type || 'riad'
+  const story = propertyStories[propertyType] || propertyStories.riad
 
   return (
     <>
@@ -277,44 +272,48 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
               )}
 
               {/* Features */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-              >
-                <h2 className="text-xl font-semibold mb-6">Features &amp; Amenities</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {activeFeatures.map(({ key, label }) => (
-                    <div key={key} className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Check className="w-4 h-4 text-primary" />
+              {activeFeatures.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <h2 className="text-xl font-semibold mb-6">Features &amp; Amenities</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {activeFeatures.map(({ key, label }) => (
+                      <div key={key} className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Check className="w-4 h-4 text-primary" />
+                        </div>
+                        <span className="text-sm">{label}</span>
                       </div>
-                      <span className="text-sm">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
 
               {/* Additional Amenities */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-              >
-                <h2 className="text-xl font-semibold mb-6">Additional Amenities</h2>
-                <div className="flex flex-wrap gap-2">
-                  {property.amenities.map((amenity) => (
-                    <span 
-                      key={amenity}
-                      className="px-4 py-2 bg-secondary rounded-full text-sm"
-                    >
-                      {amenity}
-                    </span>
-                  ))}
-                </div>
-              </motion.div>
+              {property.amenities && property.amenities.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <h2 className="text-xl font-semibold mb-6">Additional Amenities</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {property.amenities.map((amenity) => (
+                      <span
+                        key={amenity}
+                        className="px-4 py-2 bg-secondary rounded-full text-sm"
+                      >
+                        {amenity}
+                      </span>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
 
               {/* Location */}
               <motion.div
@@ -349,54 +348,56 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                 onBookingClick={() => window.location.href = `/booking?property=${property.id}`}
               />
 
-              {/* Services Section */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-              >
-                <h2 className="text-xl font-semibold mb-6">Experiences &amp; Services</h2>
-                <p className="text-muted-foreground mb-6">
-                  Enhance your stay with our premium services, available on request.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {mockServices.slice(0, 4).map((service) => {
-                    const IconComponent = serviceIcons[service.category] || Sparkles
-                    return (
-                      <div 
-                        key={service.id}
-                        className="flex gap-4 p-4 bg-card rounded-lg border border-border hover:border-primary/30 transition-colors"
-                      >
-                        <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 relative">
-                          <Image 
-                            src={service.image}
-                            alt={service.name}
-                            fill
-                            className="object-cover"
-                            sizes="64px"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <IconComponent className="w-4 h-4 text-primary" />
-                            <h4 className="font-medium text-sm">{service.name}</h4>
+              {/* Services Section — only shown if real services exist */}
+              {services.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <h2 className="text-xl font-semibold mb-6">Experiences &amp; Services</h2>
+                  <p className="text-muted-foreground mb-6">
+                    Enhance your stay with our premium services, available on request.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {services.slice(0, 4).map((service) => {
+                      const IconComponent = serviceIcons[service.category as keyof typeof serviceIcons] || Sparkles
+                      return (
+                        <div
+                          key={service.id}
+                          className="flex gap-4 p-4 bg-card rounded-lg border border-border hover:border-primary/30 transition-colors"
+                        >
+                          <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <Image
+                              src={service.image}
+                              alt={service.name}
+                              fill
+                              className="object-cover"
+                              sizes="64px"
+                            />
                           </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {service.description}
-                          </p>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <IconComponent className="w-4 h-4 text-primary" />
+                              <h4 className="font-medium text-sm">{service.name}</h4>
+                            </div>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {service.description}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <Link href="/services" className="inline-block mt-4">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    View All Services
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </Link>
-              </motion.div>
+                      )
+                    })}
+                  </div>
+                  <Link href="/services" className="inline-block mt-4">
+                    <Button variant="outline" size="sm" className="gap-2">
+                      View All Services
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                </motion.div>
+              )}
             </div>
 
             {/* Sidebar - Booking Card */}
@@ -513,28 +514,30 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   <MiniTestimonial />
                 </motion.div>
 
-                {/* Optional Add-ons Preview */}
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.5 }}
-                  className="bg-card rounded-xl border border-border p-5"
-                >
-                  <h4 className="font-medium mb-4">Popular Add-ons</h4>
-                  <div className="space-y-3">
-                    {mockAddons.slice(0, 3).map((addon) => (
-                      <div key={addon.id} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{addon.name}</span>
-                        <span className="font-medium text-primary">
-                          {addon.pricePerPerson 
-                            ? `${addon.pricePerPerson}€/person` 
-                            : `${addon.priceFlat}€`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-3">Add during checkout</p>
-                </motion.div>
+                {/* Optional Add-ons Preview — only if real addons exist */}
+                {addons.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.5 }}
+                    className="bg-card rounded-xl border border-border p-5"
+                  >
+                    <h4 className="font-medium mb-4">Popular Add-ons</h4>
+                    <div className="space-y-3">
+                      {addons.slice(0, 3).map((addon) => (
+                        <div key={addon.id} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">{addon.name}</span>
+                          <span className="font-medium text-primary">
+                            {addon.pricePerPerson
+                              ? `${addon.pricePerPerson}€/person`
+                              : `${addon.priceFlat}€`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">Add during checkout</p>
+                  </motion.div>
+                )}
               </div>
             </div>
           </div>

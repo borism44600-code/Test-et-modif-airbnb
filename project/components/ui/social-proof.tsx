@@ -1,46 +1,21 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Star, Quote } from 'lucide-react'
+import { Star, Quote, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import Image from 'next/image'
+import { createClient } from '@/lib/supabase/client'
 
-const testimonials = [
-  {
-    name: 'Sophie L.',
-    location: 'Paris, France',
-    rating: 5,
-    text: 'A beautiful riad with genuine warmth. The team helped us discover hidden corners of the medina we would never have found on our own.',
-    property: 'Riad Al Jazira',
-    avatar: '/images/testimonials/avatar1.svg'
-  },
-  {
-    name: 'James M.',
-    location: 'London, UK',
-    rating: 5,
-    text: 'We came back for the third time. The attention to detail and the warm welcome make all the difference.',
-    property: 'Villa Palmeraie',
-    avatar: '/images/testimonials/avatar2.svg'
-  },
-  {
-    name: 'Elena R.',
-    location: 'Madrid, Spain',
-    rating: 5,
-    text: 'What struck us most was the personal touch. From local restaurant tips to arranging a cooking class, nothing was too much trouble.',
-    property: 'Dar Yasmine',
-    avatar: '/images/testimonials/avatar3.svg'
-  }
-]
-
-const stats = [
-  { value: '500+', label: 'Guests Welcomed' },
-  { value: '6+', label: 'Years in Marrakech' },
-  { value: '30+', label: 'Properties' },
-  { value: '24/7', label: 'Available' }
-]
+interface Testimonial {
+  name: string
+  location: string
+  rating: number
+  text: string
+  property: string
+}
 
 interface TestimonialCardProps {
-  testimonial: typeof testimonials[0]
+  testimonial: Testimonial
   className?: string
 }
 
@@ -85,7 +60,55 @@ interface TestimonialsSectionProps {
 }
 
 export function TestimonialsSection({ className, limit = 3 }: TestimonialsSectionProps) {
-  const displayTestimonials = testimonials.slice(0, limit)
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+  const [stats, setStats] = useState<{ value: string; label: string }[]>([])
+
+  useEffect(() => {
+    async function fetchReviews() {
+      try {
+        const supabase = createClient()
+
+        // Fetch reviews from Supabase
+        const { data: reviews } = await supabase
+          .from('reviews')
+          .select('guest_name, guest_location, rating, text, properties(name)')
+          .eq('published', true)
+          .order('created_at', { ascending: false })
+          .limit(limit)
+
+        if (reviews && reviews.length > 0) {
+          setTestimonials(reviews.map((r: any) => ({
+            name: r.guest_name,
+            location: r.guest_location || '',
+            rating: r.rating || 5,
+            text: r.text,
+            property: r.properties?.name || '',
+          })))
+        }
+
+        // Fetch real counts for stats
+        const { count: propertyCount } = await supabase
+          .from('properties')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'published')
+
+        setStats([
+          { value: propertyCount ? `${propertyCount}` : '0', label: 'Properties Available' },
+          { value: '24/7', label: 'Concierge Available' },
+        ])
+      } catch (err) {
+        console.error('Error fetching reviews:', err)
+        setStats([
+          { value: '0', label: 'Properties Available' },
+          { value: '24/7', label: 'Concierge Available' },
+        ])
+      }
+    }
+    fetchReviews()
+  }, [limit])
+
+  // Don't render the section at all if there are no testimonials
+  if (testimonials.length === 0 && stats.length === 0) return null
 
   return (
     <section className={cn('py-24 md:py-32 bg-background', className)}>
@@ -108,52 +131,93 @@ export function TestimonialsSection({ className, limit = 3 }: TestimonialsSectio
         </motion.div>
 
         {/* Testimonials Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-          {displayTestimonials.map((testimonial, index) => (
-            <motion.div
-              key={testimonial.name}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: index * 0.1 }}
-            >
-              <TestimonialCard testimonial={testimonial} />
-            </motion.div>
-          ))}
-        </div>
+        {testimonials.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+            {testimonials.map((testimonial, index) => (
+              <motion.div
+                key={testimonial.name + index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: index * 0.1 }}
+              >
+                <TestimonialCard testimonial={testimonial} />
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 mb-16 text-muted-foreground">
+            <MessageSquare className="w-12 h-12 mb-4" />
+            <p className="font-medium text-foreground">No guest reviews yet</p>
+            <p className="text-sm mt-1">Reviews will appear here once guests share their experience.</p>
+          </div>
+        )}
 
         {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-8 p-8 bg-secondary/50 rounded-xl"
-        >
-          {stats.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: index * 0.1 }}
-              className="text-center"
-            >
-              <p className="text-3xl md:text-4xl font-semibold text-primary luxury-heading">
-                {stat.value}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
-            </motion.div>
-          ))}
-        </motion.div>
+        {stats.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="grid grid-cols-2 gap-8 p-8 bg-secondary/50 rounded-xl max-w-md mx-auto"
+          >
+            {stats.map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: index * 0.1 }}
+                className="text-center"
+              >
+                <p className="text-3xl md:text-4xl font-semibold text-primary luxury-heading">
+                  {stat.value}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
       </div>
     </section>
   )
 }
 
-// Mini testimonial for sidebars/cards
+// Mini testimonial for sidebars/cards — only renders if reviews exist
 export function MiniTestimonial({ className }: { className?: string }) {
-  const testimonial = testimonials[0]
+  const [testimonial, setTestimonial] = useState<Testimonial | null>(null)
+
+  useEffect(() => {
+    async function fetchOne() {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('reviews')
+          .select('guest_name, rating, text')
+          .eq('published', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (data) {
+          setTestimonial({
+            name: data.guest_name,
+            location: '',
+            rating: data.rating || 5,
+            text: data.text,
+            property: '',
+          })
+        }
+      } catch {
+        // No reviews available — component stays hidden
+      }
+    }
+    fetchOne()
+  }, [])
+
+  if (!testimonial) return null
+
   return (
     <div className={cn('flex items-start gap-3 p-4 bg-secondary/50 rounded-lg', className)}>
       <Quote className="w-6 h-6 text-primary/30 flex-shrink-0" />

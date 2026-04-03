@@ -1,154 +1,119 @@
-import NextAuth from "next-auth"
-import Credentials from "next-auth/providers/credentials"
-import bcrypt from "bcryptjs"
+'use server'
 
-// Admin users - In production, this would come from a database
-// Passwords are hashed using bcrypt
-const ADMIN_USERS = [
-  {
-    id: "1",
-    email: "admin@marrakechriads.com",
-    name: "Admin User",
-    // Password: "admin123" - In production, use strong passwords and store hashed in DB
-    passwordHash: "$2a$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSsvqNBqKq",
-    role: "admin" as const,
-  },
-  {
-    id: "2", 
-    email: "editor@marrakechriads.com",
-    name: "Editor User",
-    // Password: "editor123"
-    passwordHash: "$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa",
-    role: "editor" as const,
-  },
-]
+/**
+ * Unified auth module — Supabase Auth is the single source of truth.
+ * Roles are stored in the `admin_users` table (user_id, role, is_active).
+ * NextAuth has been removed entirely.
+ */
 
-export type UserRole = "admin" | "editor"
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
+
+export type UserRole = 'admin' | 'editor'
 
 export interface AdminUser {
   id: string
   email: string
-  name: string
+  name?: string
   role: UserRole
+  is_active: boolean
 }
 
-declare module "next-auth" {
-  interface User {
-    role?: UserRole
-  }
-  interface Session {
-    user: {
-      id: string
-      email: string
-      name: string
-      role: UserRole
+/**
+ * Fetch the current admin user from Supabase session + admin_users table.
+ * Returns null if not authenticated or not an admin.
+ */
+export async function getAdminUser(): Promise<AdminUser | null> {
+  const supabase = await createClient()
+
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) return null
+
+  // Primary check: admin_users table
+  const { data: adminRow } = await supabase
+    .from('admin_users')
+    .select('user_id, email, name, role, is_active')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .single()
+
+  if (adminRow) {
+    return {
+      id: adminRow.user_id,
+      email: adminRow.email,
+      name: adminRow.name ?? undefined,
+      role: adminRow.role as UserRole,
+      is_active: adminRow.is_active,
     }
   }
-}
 
-declare module "@auth/core/jwt" {
-  interface JWT {
-    role?: UserRole
-    id?: string
+  // Fallback: user_metadata.is_admin (bootstrap / first setup)
+  if (user.user_metadata?.is_admin === true) {
+    return {
+      id: user.id,
+      email: user.email ?? '',
+      name: user.user_metadata?.name ?? undefined,
+      role: 'admin',
+      is_active: true,
+    }
   }
+
+  return null
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  pages: {
-    signIn: "/admin/login",
-    error: "/admin/login",
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.role = user.role
-        token.id = user.id
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.role = token.role as UserRole
-        session.user.id = token.id as string
-      }
-      return session
-    },
-    async authorized({ auth, request }) {
-      const isLoggedIn = !!auth?.user
-      const isAdminRoute = request.nextUrl.pathname.startsWith("/admin")
-      const isLoginPage = request.nextUrl.pathname === "/admin/login"
+/**
+ * Guard: redirect to login if current user is not an active admin.
+ */
+export async function requireAdmin(): Promise<AdminUser> {
+  const admin = await getAdminUser()
+  if (!admin) redirect('/admin/login')
+  return admin
+}
 
-      if (isLoginPage) {
-        if (isLoggedIn) {
-          // Redirect to admin dashboard if already logged in
-          return Response.redirect(new URL("/admin", request.nextUrl))
-        }
-        return true
-      }
-
-      if (isAdminRoute) {
-        if (!isLoggedIn) {
-          // Redirect to login if not authenticated
-          return Response.redirect(new URL("/admin/login", request.nextUrl))
-        }
-        return true
-      }
-
-      return true
-    },
-  },
-  providers: [
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        const email = credentials.email as string
-        const password = credentials.password as string
-
-        // Find user by email
-        const user = ADMIN_USERS.find((u) => u.email === email)
-        if (!user) {
-          return null
-        }
-
-        // Verify password
-        const isValidPassword = await bcrypt.compare(password, user.passwordHash)
-        if (!isValidPassword) {
-          return null
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        }
-      },
-    }),
-  ],
-})
-
-// Helper function to check if user has required role
+/**
+ * Check if a role satisfies a minimum required role.
+ */
 export function hasRole(userRole: UserRole | undefined, requiredRole: UserRole): boolean {
   if (!userRole) return false
-  if (requiredRole === "editor") {
-    return userRole === "admin" || userRole === "editor"
-  }
+  if (requiredRole === 'editor') return userRole === 'admin' || userRole === 'editor'
   return userRole === requiredRole
 }
 
-// Helper to hash passwords (for creating new admin users)
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10)
+/**
+ * Admin login via Supabase Auth + admin_users verification.
+ */
+export async function adminLogin(email: string, password: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  if (error) return { error: 'Identifiants invalides' }
+
+  // Verify admin access
+  const { data: adminRow } = await supabase
+    .from('admin_users')
+    .select('user_id, is_active')
+    .eq('user_id', data.user.id)
+    .eq('is_active', true)
+    .single()
+
+  const isAdminMeta = data.user.user_metadata?.is_admin === true
+
+  if (!adminRow && !isAdminMeta) {
+    await supabase.auth.signOut()
+    return { error: 'Accès admin non autorisé' }
+  }
+
+  revalidatePath('/admin')
+  return { success: true }
+}
+
+/**
+ * Admin logout.
+ */
+export async function adminLogout() {
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  revalidatePath('/admin')
+  return { success: true }
 }
