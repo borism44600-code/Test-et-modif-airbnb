@@ -74,7 +74,7 @@ export async function requireAdmin(): Promise<AdminUser> {
 /**
  * Check if a role satisfies a minimum required role.
  */
-export function hasRole(userRole: UserRole | undefined, requiredRole: UserRole): boolean {
+export async function hasRole(userRole: UserRole | undefined, requiredRole: UserRole): Promise<boolean> {
   if (!userRole) return false
   if (requiredRole === 'editor') return userRole === 'admin' || userRole === 'editor'
   return userRole === requiredRole
