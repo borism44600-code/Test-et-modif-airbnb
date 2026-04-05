@@ -154,7 +154,7 @@ export default function AdminMediaPage() {
             folder,
             uploadedAt: dbMeta?.createdAt
               ? new Date(dbMeta.createdAt).toISOString().split('T')[0]
-              : new Date(file.created_at).toISOString().split('T')[0],
+              : new Date(file.created_at || Date.now()).toISOString().split('T')[0],
             usedIn: usageMap.get(publicUrl) || [],
           })
         }
