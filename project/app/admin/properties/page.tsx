@@ -4,7 +4,7 @@ import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AdminLayout } from '@/components/admin/admin-layout'
 import { getProperties } from '@/lib/services/properties'
-import { requireAdmin } from '@/lib/services/auth'
+import { requireAdmin } from '@/lib/auth'
 import { PropertiesTable } from '@/components/admin/properties-table'
 
 export default async function AdminPropertiesPage() {

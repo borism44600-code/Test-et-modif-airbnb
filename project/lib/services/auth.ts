@@ -1,19 +1,9 @@
 'use server'
 
 /**
- * Auth service — thin re-exports from the canonical lib/auth.ts.
- * Kept for backward compatibility with existing imports.
+ * Extended auth operations (user management, password updates).
+ * Core auth functions (getAdminUser, requireAdmin, etc.) are in @/lib/auth.
  */
-
-export {
-  getAdminUser,
-  requireAdmin,
-  adminLogin,
-  adminLogout,
-  hasRole,
-  type AdminUser,
-  type UserRole,
-} from '@/lib/auth'
 
 import { createClient } from '@/lib/supabase/server'
 

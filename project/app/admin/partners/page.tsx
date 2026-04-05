@@ -1,5 +1,5 @@
 import { getPartners } from '@/lib/services/partners'
-import { requireAdmin } from '@/lib/services/auth'
+import { requireAdmin } from '@/lib/auth'
 import { PartnersAdmin } from '@/components/admin/partners-admin'
 
 export default async function AdminPartnersPage() {

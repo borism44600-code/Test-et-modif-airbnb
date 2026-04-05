@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getPropertyById } from '@/lib/services/properties'
-import { requireAdmin } from '@/lib/services/auth'
+import { requireAdmin } from '@/lib/auth'
 import { PropertyEditForm } from '@/components/admin/property-edit-form'
 
 interface EditPropertyPageProps {
